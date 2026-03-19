@@ -138,7 +138,8 @@
                 <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
                     <div class="absolute top-0 left-0 w-full h-3 bg-[#E3000F]"></div>
                     <h2 id="end-title" class="text-4xl font-extrabold text-gray-900 mb-1 mt-2">GAME OVER</h2>
-                    <p id="game-over-reason" class="text-[#E3000F] font-bold mb-4 bg-red-50 py-1 px-2 rounded-full text-sm border border-red-100">เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน</p>
+                    
+                    <p id="game-over-reason" class="text-[#E3000F] font-bold mb-4 bg-red-50 py-2 px-3 rounded-xl text-sm border border-red-100 leading-tight">เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน</p>
                     
                     <div class="grid grid-cols-3 gap-2 mb-6">
                         <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
@@ -231,7 +232,9 @@
         </div>
 
         <div id="toast">LEVEL UP!</div>
-    </div> <script>
+    </div>
+
+    <script>
         // ==========================================
         // ตัวแปรสำคัญสำหรับแก้ภาพดำบนมือถือ
         // ==========================================
@@ -336,7 +339,7 @@
         // ==========================================
         // Game Setup & Audio
         // ==========================================
-        const gameContainer = document.getElementById('game-container'); // 🌟 เพิ่มตัวแปรคอนเทนเนอร์
+        const gameContainer = document.getElementById('game-container'); 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
@@ -414,7 +417,6 @@
         let obstacles = [], logos = [];
         let laneWidth = 0, shoulderWidth = 0;
 
-        // 🌟 4. แก้ไขฟังก์ชัน resize ให้วัดขนาดจาก #game-container แทน window
         function resize() {
             const rect = gameContainer.getBoundingClientRect();
             canvas.width = rect.width; 
@@ -642,7 +644,6 @@
         function handleInput(e) {
             if (gameState !== 'PLAYING') return; if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') e.preventDefault();
             let clientX; if (e.type === 'touchstart') clientX = e.touches[0].clientX; else if (e.type === 'mousedown') clientX = e.clientX; else return;
-            // 🌟 แก้ไขการจิ้มเปลี่ยนเลนให้คำนวณจากความกว้างของหน้าจอเกมจริงๆ
             const rect = gameContainer.getBoundingClientRect();
             const clickX = clientX - rect.left;
             if (clickX < canvas.width / 2) player.lane = Math.max(0, player.lane - 1); else player.lane = Math.min(LANES - 1, player.lane + 1);
@@ -677,7 +678,13 @@
             endTitle.innerText = isWin ? "YOU WIN!" : "GAME OVER";
             endTitle.style.color = isWin ? "#10B981" : "#111111";
             finalDistanceDisplay.innerText = distance; finalPointsDisplay.innerText = score; finalLevelDisplay.innerText = level; 
-            gameOverReason.innerText = "เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน"; 
+            
+            // 🌟 1. ตั้งค่าแสดงผลข้อความตามเงื่อนไข (ชนะ หรือ แพ้/ชนกรวย) 🌟
+            if (isWin) {
+                gameOverReason.innerHTML = "เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน";
+            } else {
+                gameOverReason.innerHTML = "ศูนย์ซ่อมสีอีซูซุสหะภัณฑ์เราก็มีนะ<br>ไม่ต้องรอนาน อะไหล่แท้";
+            }
             
             let isTop5 = false;
             if (topScoresList.length < 5) {
