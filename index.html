@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>อีซูซุสหะภัณฑ์ D-Max ตะลุยด่าน</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800;900&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; user-select: none; touch-action: none; font-family: 'Kanit', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        #toast { visibility: hidden; position: fixed; z-index: 50; left: 50%; top: 15%; transform: translateX(-50%); font-size: 26px; font-weight: 900; color: #FFD700; text-shadow: 0px 4px 10px rgba(0,0,0,0.9), 0px 0px 20px rgba(255,215,0,0.8), 0px 0px 30px rgba(255,215,0,0.6); text-align: center; white-space: nowrap; pointer-events: none; }
+        #toast.show { visibility: visible; animation: popin 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), fadeoutFloat 0.8s 1.2s forwards; }
+        @keyframes popin { from {transform: translateX(-50%) scale(0.5); opacity: 0;} to {transform: translateX(-50%) scale(1); opacity: 1;} }
+        @keyframes fadeoutFloat { from {opacity: 1; transform: translateX(-50%) scale(1) translateY(0);} to {opacity: 0; transform: translateX(-50%) scale(0.9) translateY(-30px);} }
+
+        .level-up-anim { animation: pulse 0.5s infinite alternate; }
+        .point-anim { animation: pointBounce 0.3s ease-out; }
+        @keyframes pulse { from { text-shadow: 0 0 10px #FFD700; transform: scale(1); } to { text-shadow: 0 0 20px #FFD700, 0 0 30px #FFD700; transform: scale(1.1); } }
+        @keyframes pointBounce { 0% { transform: scale(1); color: #FFF; } 50% { transform: scale(1.3); color: #10B981; } 100% { transform: scale(1); color: #FFF; } }
+        
+        #hell-overlay { position: absolute; inset: 0; box-shadow: inset 0 0 100px 20px rgba(255, 0, 0, 0.5); pointer-events: none; opacity: 0; transition: opacity 2s ease-in-out; }
+        #hell-overlay.active { opacity: 1; }
+        .text-outline { text-shadow: 0px 2px 4px rgba(0,0,0,0.8), 0px 0px 2px rgba(0,0,0,1); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+    <div id="hell-overlay"></div>
+
+    <div id="ui-layer">
+        
+        <div id="main-menu" class="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] transition-opacity duration-300">
+            <h1 class="font-black mb-4 text-center drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)] italic tracking-wider uppercase leading-none">
+                <span class="text-[#E3000F] text-[3.5rem] sm:text-6xl">อีซูซุ</span><br>
+                <span class="text-[#10B981] text-4xl sm:text-5xl leading-tight">สหะภัณฑ์</span><br>
+                <span class="text-white text-3xl sm:text-4xl">D-Max ตะลุยด่าน</span>
+            </h1>
+            
+            <div class="bg-white/95 rounded-xl p-3 mb-4 w-full max-w-[280px] shadow-lg">
+                <h3 class="text-[#E3000F] font-bold text-center border-b-2 border-red-200 pb-1 mb-2 text-sm">🏆 Top 5 คะแนนสูงสุด</h3>
+                <ul id="leaderboard-ui" class="text-sm text-gray-800 space-y-1">
+                    <li class="text-center text-gray-500">กำลังโหลดข้อมูล...</li>
+                </ul>
+            </div>
+
+            <div class="w-full max-w-[280px] mb-4">
+                <input type="text" id="player-name-input" maxlength="20" placeholder="กรอกชื่อของคุณ (สูงสุด 20 ตัวอักษร)" 
+                       class="w-full px-4 py-3 rounded-xl border-2 border-transparent focus:border-[#E3000F] focus:outline-none text-center font-bold text-gray-900 bg-white/95 shadow-lg transition-colors">
+            </div>
+            
+            <div class="flex flex-col gap-3 w-full max-w-[280px]">
+                <button onclick="checkAndStartGame()" class="w-full bg-[#E3000F] text-white py-3 rounded-full font-bold text-xl uppercase tracking-widest shadow-[0_0_20px_rgba(227,0,15,0.7)] active:scale-95 transition-transform border-2 border-white/30">
+                    Start Game
+                </button>
+                <button onclick="showTutorial()" class="w-full bg-gray-900/90 text-white py-2 rounded-full font-bold text-md uppercase tracking-wider shadow-lg active:scale-95 transition-transform border border-gray-500 backdrop-blur-sm">
+                    วิธีเล่น / กติกา
+                </button>
+            </div>
+        </div>
+
+        <div id="hud" class="hidden absolute top-0 left-0 w-full p-2 flex flex-col gap-1 pointer-events-none z-10 pt-4">
+            <div class="flex justify-between px-4 mt-2">
+                <div class="flex flex-col text-left">
+                    <p class="text-white text-2xl font-black leading-none text-outline tracking-wider"><span id="distance-display">0</span> <span class="text-sm text-gray-200">KM</span></p>
+                    <p class="text-green-400 text-xl font-black leading-none mt-1 text-outline transition-transform" id="points-display">0 <span class="text-xs text-green-200">PTS</span></p>
+                </div>
+                <div class="flex flex-col text-right">
+                    <p id="level-text" class="text-yellow-400 text-2xl font-black leading-none text-outline">LV <span id="level-display">1</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div id="interstitial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300 p-6">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-3 bg-[#E3000F]"></div>
+                <h2 class="text-3xl font-extrabold text-[#E3000F] mb-4 mt-2">💡 เกร็ดความรู้!</h2>
+                
+                <img id="interstitial-img" src="" alt="Knowledge" class="w-full rounded-xl mb-4 border-2 border-gray-100 shadow-sm">
+                <p id="interstitial-text" class="text-gray-800 font-bold mb-6 text-sm leading-relaxed"></p>
+                
+                <button onclick="resumeGame()" class="w-full bg-[#10B981] text-white py-3 rounded-xl font-bold uppercase active:scale-95 transition-transform shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]">
+                    ลุยด่านต่อไป! (CONTINUE)
+                </button>
+            </div>
+        </div>
+
+        <div id="game-over" class="hidden pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300 p-6 z-40">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-3 bg-[#E3000F]"></div>
+                <h2 id="end-title" class="text-4xl font-extrabold text-gray-900 mb-1 mt-2">GAME OVER</h2>
+                <p id="game-over-reason" class="text-[#E3000F] font-bold mb-4 bg-red-50 py-1 px-2 rounded-full text-sm border border-red-100">เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน</p>
+                
+                <div class="grid grid-cols-3 gap-2 mb-6">
+                    <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
+                        <p class="text-gray-500 text-[10px] font-bold uppercase">ระยะทาง</p>
+                        <p class="text-xl font-black text-[#E3000F] leading-none mt-1"><span id="final-distance">0</span><br><span class="text-xs text-gray-800">KM</span></p>
+                    </div>
+                    <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
+                        <p class="text-gray-500 text-[10px] font-bold uppercase">คะแนน</p>
+                        <p class="text-2xl font-black text-green-500 leading-none mt-1" id="final-points">0</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
+                        <p class="text-gray-500 text-[10px] font-bold uppercase">เลเวล</p>
+                        <p class="text-xl font-black text-yellow-500 leading-none mt-1">LV <span id="final-level">1</span></p>
+                    </div>
+                </div>
+
+                <div id="top5-form" class="hidden bg-red-50 p-4 rounded-xl border border-red-200 mb-4 text-left">
+                    <h3 class="text-[#E3000F] font-bold text-lg mb-1">🎉 ยินดีด้วย! คุณติดอันดับ Top 5</h3>
+                    <p class="text-xs text-gray-600 mb-3">กรุณากรอกเบอร์โทรศัพท์เพื่อบันทึกสถิติและรับสิทธิ์ลุ้นรางวัล</p>
+                    <input type="tel" id="player-phone-input" placeholder="เบอร์โทรศัพท์ 10 หลัก" maxlength="10" 
+                           class="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-[#E3000F] focus:outline-none text-center font-bold mb-2 font-sans">
+                    <p class="text-[10px] text-gray-500 text-center mb-3">*ข้อมูลของท่านจะถูกเก็บเป็นความลับและใช้สำหรับติดต่อมอบรางวัลโดยอีซูซุสหะภัณฑ์เท่านั้น</p>
+                    <button onclick="submitTop5Score()" id="btn-submit-score" class="w-full bg-[#E3000F] text-white py-2 rounded-lg font-bold shadow-md hover:bg-red-700 active:scale-95 transition-all">บันทึกคะแนนเพื่อลุ้นรางวัล</button>
+                </div>
+
+                <div id="end-game-actions" class="flex flex-col gap-3">
+                    <button onclick="saveScoreImage()" class="flex items-center justify-center gap-2 w-full bg-gray-900 text-white px-4 py-3 rounded-xl font-semibold hover:bg-black active:scale-95 transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        Save Score Image
+                    </button>
+                    <button onclick="copyReviewAndShare()" class="flex items-center justify-center gap-2 w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                        Copy Review & Share
+                    </button>
+                    <button onclick="requestRestart()" class="flex items-center justify-center gap-2 w-full bg-[#E3000F] text-white px-4 py-3 rounded-xl font-bold uppercase mt-2 active:scale-95 transition-all border-2 border-transparent">
+                        Play Again
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="confirm-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-[320px] text-center shadow-2xl">
+                <h3 class="text-2xl font-bold text-gray-900 mb-2">เริ่มเกมใหม่?</h3>
+                <p class="text-gray-600 mb-6 font-medium">คุณต้องการเริ่มเล่นรอบใหม่<br>ใช่หรือไม่?</p>
+                <div class="flex gap-3">
+                    <button onclick="hideConfirmModal()" class="flex-1 bg-gray-200 text-gray-800 py-3 rounded-xl font-bold hover:bg-gray-300 transition-colors">ยกเลิก</button>
+                    <button onclick="restartGame()" class="flex-1 bg-[#E3000F] text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors">ตกลง</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tutorial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative flex flex-col max-h-[90vh]">
+                <div class="absolute top-0 left-0 w-full h-3 bg-gray-800"></div>
+                <h2 class="text-3xl font-extrabold text-gray-900 mb-4 mt-2 text-center">วิธีเล่น และ กติกา</h2>
+                
+                <div class="overflow-y-auto flex-1 pr-2 space-y-4 text-left custom-scrollbar">
+                    <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                        <h3 class="font-bold text-[#E3000F] text-lg mb-1">การควบคุม</h3>
+                        <p class="text-sm text-gray-700">แตะหน้าจอฝั่ง <b class="text-black">ซ้าย</b> หรือ <b class="text-black">ขวา</b> เพื่อให้รถเปลี่ยนเลน</p>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                        <h3 class="font-bold text-[#E3000F] text-lg mb-2">ไอเทมและสิ่งกีดขวาง</h3>
+                        <ul class="text-sm text-gray-700 space-y-3">
+                            <li class="flex items-start gap-3">
+                                <span class="text-2xl leading-none">🚧</span> 
+                                <div><b class="text-red-600">กรวยจราจร:</b> ห้ามชนเด็ดขาด! ชนปุ๊บเกมจบปั๊บ</div>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="text-2xl leading-none">🛡️</span> 
+                                <div><b class="text-blue-600">โลโก้ <span class="text-[#E3000F]">ISUZU</span>:</b> สะสมเพื่อรับคะแนนแบบสุ่ม (50 - 100 คะแนน)</div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                        <h3 class="font-bold text-[#E3000F] text-lg mb-2">กติกาพิเศษ</h3>
+                        <p class="text-sm text-gray-700">ขับให้ไกลที่สุด รถจะเร็วขึ้นเมื่อถึงกิโลเมตรที่ 100 และเกมจะจบอย่างสมบูรณ์เมื่อคุณวิ่งถึง <b>1,000 กิโลเมตร (จบ 10 ด่าน)</b></p>
+                    </div>
+                </div>
+
+                <button onclick="hideTutorial()" class="w-full bg-gray-900 text-white py-3 rounded-xl font-bold mt-4 hover:bg-black active:scale-95 transition-colors">
+                    เข้าใจแล้ว ปิดหน้าต่าง
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="toast">LEVEL UP!</div>
+
+    <script>
+        // ==========================================
+        // ตัวแปรสำคัญสำหรับแก้ภาพดำบนมือถือ
+        // ==========================================
+        let finalImageDataUrl = ""; 
+
+        // ==========================================
+        // 🌟 1. ข้อมูลเกร็ดความรู้ (เรียงตามลำดับ Level 2, 4, 6, 8, 10)
+        // ==========================================
+        const promoData = [
+            { img: "SILVER.jpg", text: "my-SILVER ส่วนลดยางรถยนต์ 1200.- ส่วนลดแบตเตอรี่ 300.-" },
+            { img: "GOLD.jpg", text: "my-GOLD ส่วนลดน้ำมันเครื่อง 3% ส่วนลดอะไหล่ 5% ส่วนลดยางรถยนต์ 2400.- ส่วนลดแบตเตอรี่ 600.-" },
+            { img: "PLATINUM.jpg", text: "my-Platinum ส่วนลดน้ำมันเครื่อง 5% ส่วนลดอะไหล่ 10% ส่วนลดยางรถยนต์ 2400.- ส่วนลดแบตเตอรี่ 600.-" },
+            { img: "DIAMOND.jpg", text: "my-DIAMOND ส่วนลดน้ำมันเครื่อง 10% ส่วนลดอะไหล่ 15% ส่วนลดยางรถยนต์ 2400.- ส่วนลดแบตเตอรี่ 600.-" },
+            { img: "SAHAPHAN.jpg", text: "\"อีซูซุสหะภัณฑ์\" ซ่อมเร็ว ไม่ต้องรอนาน การันตีคุณภาพ" }
+        ];
+
+        // ==========================================
+        // Firebase Setup
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAk_k2ALBMQkzxD7T5lZYkGnN1ZvjAlhCc",
+            authDomain: "isuzu-match-card-game.firebaseapp.com",
+            databaseURL: "https://isuzu-match-card-game-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "isuzu-match-card-game",
+            storageBucket: "isuzu-match-card-game.firebasestorage.app",
+            messagingSenderId: "220923715809",
+            appId: "1:220923715809:web:e0ca6474132b4b2ed857a0",
+            measurementId: "G-MEZZ1189KG"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        
+        let topScoresList = [];
+        let isScoreSubmitted = false;
+
+        function fetchLeaderboard() {
+            const leaderboardRef = db.ref('leaderboard_runner').orderByChild('score').limitToLast(5);
+            leaderboardRef.on('value', (snapshot) => {
+                topScoresList = [];
+                snapshot.forEach((childSnapshot) => {
+                    topScoresList.push(childSnapshot.val());
+                });
+                topScoresList.reverse();
+                updateLeaderboardUI();
+            });
+        }
+
+        function updateLeaderboardUI() {
+            const listEl = document.getElementById('leaderboard-ui');
+            listEl.innerHTML = '';
+            if (topScoresList.length === 0) {
+                listEl.innerHTML = '<li class="text-center text-gray-500 py-2">ยังไม่มีผู้ทำสถิติ เป็นคนแรกเลย!</li>';
+                return;
+            }
+            
+            topScoresList.forEach((item, index) => {
+                let medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : `${index+1}.`));
+                let colorClass = index === 0 ? 'text-yellow-600 font-bold' : (index === 1 ? 'text-gray-500 font-bold' : (index === 2 ? 'text-orange-600 font-bold' : 'text-gray-700 font-semibold'));
+                
+                let displayName = item.name.length > 12 ? item.name.substring(0, 12) + '...' : item.name;
+
+                listEl.innerHTML += `<li class="flex justify-between items-center border-b border-gray-100 last:border-0 py-1">
+                    <span class="${colorClass}">${medal} ${displayName}</span>
+                    <span class="font-bold text-green-600">${item.score} <span class="text-[10px] text-gray-400">PTS</span></span>
+                </li>`;
+            });
+        }
+        
+        fetchLeaderboard();
+
+        function submitTop5Score() {
+            const phoneInput = document.getElementById('player-phone-input').value.trim();
+            if (phoneInput.length < 9) {
+                showToastMsg("กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง");
+                return;
+            }
+
+            const btn = document.getElementById('btn-submit-score');
+            btn.innerText = "กำลังบันทึก...";
+            btn.disabled = true;
+
+            const newScoreRef = db.ref('leaderboard_runner').push();
+            newScoreRef.set({
+                name: playerName,
+                phone: phoneInput,
+                score: score,
+                distance: distance,
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            }).then(() => {
+                showToastMsg("บันทึกสถิติของคุณเรียบร้อยแล้ว!");
+                isScoreSubmitted = true;
+                document.getElementById('top5-form').classList.add('hidden');
+                document.getElementById('end-game-actions').classList.remove('hidden');
+            }).catch((error) => {
+                console.error(error);
+                showToastMsg("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+                btn.innerText = "ลองใหม่อีกครั้ง";
+                btn.disabled = false;
+            });
+        }
+
+        // ==========================================
+        // Game Setup & Audio
+        // ==========================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let playerName = "Unknown Driver";
+        let gameState = 'MENU';
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let engineOsc, engineGain, nextBeatTime = 0, beatInterval = 0.5, soundEnabled = true;
+
+        function initAudio() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if(!engineOsc) {
+                engineOsc = audioCtx.createOscillator(); engineGain = audioCtx.createGain();
+                engineOsc.type = 'sawtooth'; engineOsc.frequency.value = 50; engineGain.gain.value = 0.05; 
+                const filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 200;
+                engineOsc.connect(filter); filter.connect(engineGain); engineGain.connect(audioCtx.destination);
+                engineOsc.start();
+            }
+        }
+        function updateEngineSound(spd) { if (engineOsc && soundEnabled) engineOsc.frequency.setTargetAtTime(40 + (spd * 2), audioCtx.currentTime, 0.1); }
+        function stopEngineSound() { if (engineGain) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1); }
+        function playTone(freq, type, duration, vol) {
+            if (!soundEnabled) return; const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+            osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+        function playCoinSound() {
+            if (!soundEnabled) return; playTone(987.77, 'sine', 0.1, 0.2); setTimeout(() => playTone(1318.51, 'sine', 0.2, 0.2), 100);
+        }
+        function playCrashSound() {
+            if (!soundEnabled) return; const bufferSize = audioCtx.sampleRate * 0.5; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+            const filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(1000, audioCtx.currentTime); filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.5);
+            const gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.5, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination); noise.start();
+        }
+        function playLevelUpSound() { playTone(440, 'square', 0.1, 0.2); setTimeout(() => playTone(554, 'square', 0.1, 0.2), 150); setTimeout(() => playTone(659, 'square', 0.3, 0.2), 300); }
+        function scheduler() {
+            if(gameState !== 'PLAYING' || !soundEnabled) return;
+            while (nextBeatTime < audioCtx.currentTime + 0.1) {
+                playTone(150, 'square', 0.05, 0.1); 
+                if(Math.random() > 0.5) setTimeout(() => playTone(8000, 'square', 0.02, 0.05), 100); 
+                nextBeatTime += beatInterval;
+            }
+        }
+
+        // --- UI & Game Variables ---
+        const mainMenu = document.getElementById('main-menu'), gameOverScreen = document.getElementById('game-over'), hud = document.getElementById('hud');
+        const distanceDisplay = document.getElementById('distance-display'), pointsDisplay = document.getElementById('points-display'), levelDisplay = document.getElementById('level-display'), levelText = document.getElementById('level-text');
+        const finalDistanceDisplay = document.getElementById('final-distance'), finalPointsDisplay = document.getElementById('final-points'), finalLevelDisplay = document.getElementById('final-level');
+        const endTitle = document.getElementById('end-title'), gameOverReason = document.getElementById('game-over-reason'), hellOverlay = document.getElementById('hell-overlay');
+        const confirmModal = document.getElementById('confirm-modal'), tutorialModal = document.getElementById('tutorial-modal'), toast = document.getElementById('toast');
+        const interstitialModal = document.getElementById('interstitial-modal'); // 🌟 ตัวแปร UI หน้าคั่น
+
+        const logoImg = new Image(); 
+        logoImg.src = '1000631943.jpg';
+        
+        const bgParticles = Array.from({length: 80}, () => ({ x: Math.random(), y: Math.random(), size: Math.random() * 3 + 1, speed: Math.random() * 1.5 + 0.5 }));
+        const levelThemes = {
+            1: { road: '#404040', lines: '#ffffff', shoulder: '#5cb85c', effect: 'none' }, 2: { road: '#3b3b3b', lines: '#eeeeee', shoulder: '#388E3C', effect: 'none' },
+            3: { road: '#4e342e', lines: '#ffcc80', shoulder: '#8D6E63', effect: 'dust' }, 4: { road: '#3e2723', lines: '#ffb74d', shoulder: '#A1887F', effect: 'dust' },
+            5: { road: '#1a237e', lines: '#00e5ff', shoulder: '#000000', effect: 'cyber' }, 6: { road: '#121212', lines: '#ff00ff', shoulder: '#1A001A', effect: 'cyber' },
+            7: { road: '#78909c', lines: '#ffffff', shoulder: '#ECEFF1', effect: 'snow' }, 8: { road: '#546e7a', lines: '#e0f7fa', shoulder: '#CFD8DC', effect: 'snow' },
+            9: { road: '#212121', lines: '#ff5722', shoulder: '#3E2723', effect: 'volcano' }, 10: { road: '#2b0000', lines: '#ff1744', shoulder: '#ff3d00', effect: 'hell' }
+        };
+
+        const LANES = 3, MAX_LEVEL = 10, MAX_DISTANCE = 1000;
+        let distance = 0, score = 0, level = 1, logosCollected = 0;
+        let baseSpeed = 2.5, speed = 2.5; 
+        let frameCount = 0, lastTime = 0;
+        
+        let player = { lane: 1, width: 0, height: 0, y: 0, targetX: 0, currentX: 0, targetRotation: 0, currentRotation: 0 };
+        let obstacles = [], logos = [];
+        let laneWidth = 0, shoulderWidth = 0;
+
+        function resize() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            shoulderWidth = canvas.width * 0.12; const playableWidth = canvas.width - (shoulderWidth * 2); laneWidth = playableWidth / LANES;
+            player.width = laneWidth * 0.55; player.height = player.width * 2.2; player.y = canvas.height - player.height - 40;
+            player.targetX = getLaneCenterX(player.lane);
+            if(gameState !== 'PLAYING' && player.currentX === 0) player.currentX = player.targetX;
+        }
+        window.addEventListener('resize', resize); resize();
+
+        function getLaneCenterX(laneIndex) { return shoulderWidth + (laneIndex * laneWidth) + (laneWidth / 2); }
+        function showToastMsg(message) { toast.innerText = message; toast.className = "show"; setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 1500); }
+        function showLevelUpToast(message) { toast.innerHTML = message; toast.className = "show"; levelText.classList.add("level-up-anim"); setTimeout(function(){ toast.className = toast.className.replace("show", ""); levelText.classList.remove("level-up-anim"); }, 2000); }
+        function animatePoints() { pointsDisplay.classList.remove('point-anim'); void pointsDisplay.offsetWidth; pointsDisplay.classList.add('point-anim'); }
+
+        // --- Drawing ---
+        function drawRoad() {
+            const theme = levelThemes[level] || levelThemes[MAX_LEVEL];
+            ctx.fillStyle = theme.road; ctx.fillRect(shoulderWidth, 0, canvas.width - (shoulderWidth*2), canvas.height);
+            ctx.fillStyle = theme.shoulder; ctx.fillRect(0, 0, shoulderWidth, canvas.height); ctx.fillRect(canvas.width - shoulderWidth, 0, shoulderWidth, canvas.height);
+
+            if (theme.effect === 'snow') { ctx.fillStyle = '#ffffff'; bgParticles.forEach(p => { let px = shoulderWidth + (p.x * (canvas.width - shoulderWidth*2)); let py = (p.y * canvas.height + frameCount * p.speed * speed * 0.3) % canvas.height; ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI*2); ctx.fill(); }); } 
+            else if (theme.effect === 'hell' || theme.effect === 'volcano') { ctx.fillStyle = '#ff5722'; bgParticles.forEach(p => { let px = shoulderWidth + (p.x * (canvas.width - shoulderWidth*2)); let py = (p.y * canvas.height - frameCount * p.speed * 2) % canvas.height; if(py < 0) py += canvas.height; ctx.fillRect(px, py, p.size*1.5, p.size*1.5); }); } 
+            else if (theme.effect === 'cyber') { ctx.strokeStyle = theme.lines; ctx.globalAlpha = 0.3; ctx.lineWidth = 1.5; bgParticles.slice(0, 15).forEach(p => { let py = (p.y * canvas.height + frameCount * speed * 1.5) % canvas.height; ctx.beginPath(); ctx.moveTo(shoulderWidth, py); ctx.lineTo(canvas.width - shoulderWidth, py); ctx.stroke(); }); ctx.globalAlpha = 1.0; } 
+            else if (theme.effect === 'dust') { ctx.fillStyle = 'rgba(215, 204, 200, 0.4)'; bgParticles.slice(0, 30).forEach(p => { let px = shoulderWidth + (p.x * (canvas.width - shoulderWidth*2)); let py = (p.y * canvas.height + frameCount * p.speed * speed * 0.5) % canvas.height; ctx.beginPath(); ctx.arc(px, py, p.size * 1.5, 0, Math.PI*2); ctx.fill(); }); } 
+            else if (level >= 3 && theme.effect === 'none') { ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; for(let i = 0; i < level; i++) { let lx = shoulderWidth + (Math.random() * (canvas.width - shoulderWidth*2)); let ly = (frameCount * speed * 2 + Math.random() * 100) % canvas.height; ctx.fillRect(lx, ly, 2, 50); } }
+
+            ctx.strokeStyle = theme.lines; ctx.lineWidth = Math.max(2, canvas.width * 0.01);
+            ctx.beginPath(); ctx.moveTo(shoulderWidth, 0); ctx.lineTo(shoulderWidth, canvas.height); ctx.moveTo(canvas.width - shoulderWidth, 0); ctx.lineTo(canvas.width - shoulderWidth, canvas.height); ctx.stroke();
+
+            ctx.setLineDash([canvas.height * 0.05, canvas.height * 0.05]); const lineOffset = (frameCount * speed) % (canvas.height * 0.1); ctx.lineDashOffset = -lineOffset;
+            ctx.beginPath(); for (let i = 1; i < LANES; i++) { let x = shoulderWidth + (i * laneWidth); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); } ctx.stroke(); ctx.setLineDash([]); 
+        }
+
+        function drawPineTree(size, isSnow) { ctx.fillStyle = '#5D4037'; ctx.fillRect(-size*0.1, 0, size*0.2, size*0.6); ctx.fillStyle = isSnow ? '#E0F7FA' : '#2E7D32'; for(let i=0; i<3; i++) { ctx.beginPath(); let ty = -size*0.2 - (i*size*0.3); let tw = size*0.7 - (i*size*0.15); ctx.moveTo(0, ty - size*0.5); ctx.lineTo(-tw, ty + size*0.3); ctx.lineTo(tw, ty + size*0.3); ctx.fill(); } }
+        function drawCactus(size) { ctx.fillStyle = '#2E7D32'; ctx.beginPath(); ctx.roundRect(-size*0.15, -size*0.8, size*0.3, size*0.8, size*0.15); ctx.fill(); ctx.beginPath(); ctx.roundRect(-size*0.4, -size*0.5, size*0.3, size*0.15, size*0.07); ctx.roundRect(-size*0.4, -size*0.6, size*0.15, size*0.25, size*0.07); ctx.fill(); ctx.beginPath(); ctx.roundRect(size*0.1, -size*0.3, size*0.3, size*0.15, size*0.07); ctx.roundRect(size*0.25, -size*0.5, size*0.15, size*0.35, size*0.07); ctx.fill(); }
+        function drawCyberPole(size) { ctx.fillStyle = '#111'; ctx.fillRect(-size*0.05, -size, size*0.1, size); ctx.shadowBlur = 10; ctx.shadowColor = (frameCount % 60 < 30) ? '#00e5ff' : '#ff00ff'; ctx.fillStyle = ctx.shadowColor; ctx.fillRect(-size*0.02, -size*0.9, size*0.04, size*0.8); ctx.shadowBlur = 0; }
+        function drawDeadTree(size, isHell) { ctx.strokeStyle = isHell ? '#1a0000' : '#3E2723'; ctx.lineWidth = size*0.15; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, size*0.2); ctx.lineTo(0, -size*0.5); ctx.stroke(); ctx.lineWidth = size*0.08; ctx.beginPath(); ctx.moveTo(0, -size*0.2); ctx.lineTo(-size*0.3, -size*0.4); ctx.moveTo(0, -size*0.3); ctx.lineTo(size*0.3, -size*0.6); ctx.stroke(); if(isHell) { ctx.fillStyle = '#ff3d00'; ctx.beginPath(); ctx.arc(-size*0.3, -size*0.4, size*0.05, 0, Math.PI*2); ctx.arc(size*0.3, -size*0.6, size*0.05, 0, Math.PI*2); ctx.fill(); } }
+
+        function drawSceneryDecoration(theme, x, y, size) {
+            ctx.save(); ctx.translate(x, y);
+            if (theme.effect === 'none' || theme.effect === 'dust') { if(level <= 2) drawPineTree(size, false); else drawCactus(size); } 
+            else if (theme.effect === 'cyber') drawCyberPole(size); else if (theme.effect === 'snow') drawPineTree(size, true); else drawDeadTree(size, level === 10);
+            ctx.restore();
+        }
+
+        function drawSceneryPass(currentSpeed) {
+            const spacing = 250; const offset = (frameCount * currentSpeed) % spacing; const size = shoulderWidth * 0.7; const theme = levelThemes[level] || levelThemes[MAX_LEVEL];
+            for (let y = -spacing; y < canvas.height + spacing; y += spacing) { let drawY = y + offset; drawSceneryDecoration(theme, shoulderWidth / 2, drawY, size); drawSceneryDecoration(theme, canvas.width - shoulderWidth / 2, drawY + (spacing/2), size); }
+        }
+
+        function drawCar(x, y, width, height, rotation = 0) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.roundRect(-width/2 + 5, 5, width, height, 8); ctx.fill();
+            const bodyColor = '#5A5A5A', trimColor = '#111111'; 
+            ctx.fillStyle = trimColor; const flareW = 3, flareH = height * 0.18;
+            ctx.beginPath(); ctx.roundRect(-width/2 - flareW, height * 0.1, flareW*2, flareH, 2); ctx.fill(); ctx.beginPath(); ctx.roundRect(width/2 - flareW, height * 0.1, flareW*2, flareH, 2); ctx.fill(); ctx.beginPath(); ctx.roundRect(-width/2 - flareW, height * 0.65, flareW*2, flareH, 2); ctx.fill(); ctx.beginPath(); ctx.roundRect(width/2 - flareW, height * 0.65, flareW*2, flareH, 2); ctx.fill();
+            ctx.fillStyle = bodyColor; ctx.beginPath(); ctx.roundRect(-width/2, 0, width, height, 6); ctx.fill();
+            ctx.fillStyle = '#0a0a0a'; ctx.fillRect(-width/2 + 4, 0, width - 8, height * 0.08); ctx.fillStyle = '#E3000F'; ctx.fillRect(-width/4, 2, width/2, height * 0.02);
+            const cabinStartY = height * 0.25, cabinH = height * 0.3; ctx.fillStyle = '#050510'; ctx.beginPath(); ctx.moveTo(-width/2 + 4, cabinStartY); ctx.lineTo(width/2 - 4, cabinStartY); ctx.lineTo(width/2 - 1, cabinStartY + height * 0.1); ctx.lineTo(-width/2 + 1, cabinStartY + height * 0.1); ctx.fill();
+            ctx.fillStyle = '#666666'; ctx.fillRect(-width/2 + 2, cabinStartY + height * 0.1, width - 4, cabinH - height * 0.15);
+            ctx.fillStyle = trimColor; ctx.fillRect(-width/2 + 6, cabinStartY + height * 0.12, 2, height * 0.12); ctx.fillRect(width/2 - 8, cabinStartY + height * 0.12, 2, height * 0.12); ctx.fillRect(0, cabinStartY + height * 0.2, 1, height * 0.05);
+            ctx.fillStyle = '#050510'; ctx.fillRect(-width/2 + 4, cabinStartY + cabinH - height * 0.05, width - 8, height * 0.05);
+            const bedStartY = cabinStartY + cabinH; ctx.fillStyle = '#4a4a4a'; ctx.fillRect(-width/2 + 3, bedStartY, width - 6, height - bedStartY - 2);
+            ctx.fillStyle = trimColor; ctx.fillRect(-width/2 + 2, bedStartY, width - 4, height * 0.03); ctx.beginPath(); ctx.moveTo(-width/2 + 4, bedStartY); ctx.lineTo(-width/2 + 6, bedStartY + height * 0.15); ctx.lineTo(-width/2 + 3, bedStartY + height * 0.15); ctx.fill(); ctx.beginPath(); ctx.moveTo(width/2 - 4, bedStartY); ctx.lineTo(width/2 - 6, bedStartY + height * 0.15); ctx.lineTo(width/2 - 3, bedStartY + height * 0.15); ctx.fill();
+            ctx.fillStyle = '#E8E8E8'; ctx.fillRect(-width/2 + 2, 0, width * 0.2, height * 0.04); ctx.fillRect(width/2 - 2 - width * 0.2, 0, width * 0.2, height * 0.04);
+            ctx.fillStyle = '#CC0000'; ctx.fillRect(-width/2 + 2, height - height*0.04, width * 0.15, height * 0.04); ctx.fillRect(width/2 - 2 - width * 0.15, height - height*0.04, width * 0.15, height * 0.04);
+            ctx.restore();
+        }
+
+        function drawCone(x, y, size) {
+            ctx.save(); ctx.translate(x, y); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, size/2, size*0.6, size*0.2, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#FF5722'; ctx.beginPath(); ctx.moveTo(0, -size/2); ctx.lineTo(-size/2, size/2); ctx.lineTo(size/2, size/2); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.moveTo(-size/3, 0); ctx.lineTo(size/3, 0); ctx.lineTo(size/2.5, size/4); ctx.lineTo(-size/2.5, size/4); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawCompanyLogo(x, y, size) {
+            ctx.save(); ctx.translate(x, y); const floatY = Math.sin(frameCount * 0.05) * 8; ctx.translate(0, floatY);
+            ctx.shadowBlur = 20; ctx.shadowColor = '#FFFFFF'; ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(0, 0, size * 0.6, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+            if (logoImg.complete && logoImg.naturalWidth !== 0) { const imgSize = size * 1.1; ctx.drawImage(logoImg, -imgSize/2, -imgSize/2, imgSize, imgSize); } 
+            else { ctx.fillStyle = '#E3000F'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('ISUZU', 0, 0); }
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 🌟 2. ระบบดึงภาพและข้อความมาหยุดเกม (Pause)
+        // ==========================================
+        function showInterstitial(currentLevel) {
+            gameState = 'INTERSTITIAL'; // สั่งเปลี่ยนสถานะ ทำให้ loop เกมหยุดอัปเดต
+            stopEngineSound();
+
+            // คำนวณหา index ว่าต้องโชว์ภาพไหน (LV2=0, LV4=1, LV6=2, LV8=3, LV10=4)
+            const index = (currentLevel / 2) - 1;
+            const promo = promoData[index];
+
+            document.getElementById('interstitial-img').src = promo.img;
+            document.getElementById('interstitial-text').innerText = promo.text;
+
+            interstitialModal.classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 🌟 3. ระบบกลับมาเล่นเกมต่อ (Resume)
+        // ==========================================
+        function resumeGame() {
+            interstitialModal.classList.add('hidden');
+            gameState = 'PLAYING';
+            
+            // รีเซ็ตเวลาเพื่อป้องกันบัค deltaTime พุ่ง (ที่ทำให้รถพุ่งเร็วเกินไปตอนกดเริ่มต่อ)
+            lastTime = performance.now(); 
+            
+            if (soundEnabled) updateEngineSound(speed);
+            requestAnimationFrame(gameLoop); // สั่งรัน loop ต่อ
+        }
+
+        // --- Logic ---
+        function levelUp() {
+            level++;
+            baseSpeed = 2.5 + (level * 0.6); 
+            levelDisplay.innerText = level;
+            
+            if(level === 10) { showLevelUpToast(`LEVEL ${level}! <br><span style="font-size:20px; color:#ff4444;">ยินดีต้อนรับสู่นรก!</span>`); hellOverlay.classList.add('active'); } 
+            else { showLevelUpToast(`LEVEL ${level}! <br><span style="font-size:20px; color:#ffffff;">ความเร็วเพิ่มขึ้น!</span>`); }
+            playLevelUpSound();
+
+            // 🌟 เช็คว่าผ่านระดับที่หาร 2 ลงตัวหรือเปล่า (2, 4, 6, 8, 10)
+            if (level % 2 === 0) {
+                showInterstitial(level);
+            }
+        }
+
+        function spawnEntities(deltaTime) {
+            speed = baseSpeed + ((distance % 100) / 200); 
+            if (speed > 12.5) speed = 12.5; 
+
+            let spawnRate = Math.max(20, 75 - Math.floor(speed * 3)); 
+
+            if (frameCount % spawnRate === 0) {
+                const lane = Math.floor(Math.random() * LANES);
+                let rand = Math.random();
+                
+                let obsChance = 0.70 + (level * 0.01);
+                if (rand < obsChance) obstacles.push({ lane: lane, y: -50, size: player.width * 0.9 });
+                else logos.push({ lane: lane, y: -50, size: player.width * 0.8 });
+            }
+        }
+
+        function updateEntities(deltaTime) {
+            const movement = speed * (deltaTime / 16.6); const hitRadius = player.height * 0.35;
+            player.targetX = getLaneCenterX(player.lane); const diffX = player.targetX - player.currentX; player.currentX += diffX * 0.2;
+            player.targetRotation = (diffX * 0.005); player.currentRotation += (player.targetRotation - player.currentRotation) * 0.3;
+
+            updateEngineSound(speed); scheduler(); 
+
+            // Cones
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obs = obstacles[i]; obs.y += movement;
+                if (obs.lane === player.lane && Math.abs(obs.y - player.y) < hitRadius) { endGame("รถชนสิ่งกีดขวาง!", false); return; }
+                if (obs.y > canvas.height + 100) obstacles.splice(i, 1);
+            }
+
+            // Logos
+            for (let i = logos.length - 1; i >= 0; i--) {
+                let logoItem = logos[i]; logoItem.y += movement;
+                if (logoItem.lane === player.lane && Math.abs(logoItem.y - player.y) < hitRadius) {
+                    
+                    let earned = Math.floor(Math.random() * 51) + 50;
+                    score += earned;
+                    logosCollected++;
+                    pointsDisplay.innerHTML = `${score} <span class="text-[10px] text-green-200">PTS</span>`;
+                    
+                    animatePoints(); 
+                    playCoinSound(); 
+                    showToastMsg(`+${earned} PTS`);
+                    
+                    logos.splice(i, 1); 
+                    continue;
+                }
+                if (logoItem.y > canvas.height + 100) logos.splice(i, 1);
+            }
+
+            // Distance
+            if(frameCount % 10 === 0) {
+                distance += 1; distanceDisplay.innerText = distance;
+                if (distance >= MAX_DISTANCE) {
+                    endGame("ยินดีด้วย! พิชิตเป้าหมาย 1,000 กิโลเมตรสำเร็จ!", true);
+                } else if (level < MAX_LEVEL && distance >= level * 100) {
+                    levelUp();
+                }
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (gameState !== 'PLAYING') return; // 🌟 ถ้าไม่ได้อยู่ในสถานะ PLAYING บรรทัดนี้จะเตะออก ทำให้เกมหยุดทันที
+            
+            const deltaTime = timestamp - lastTime; lastTime = timestamp; frameCount++;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawRoad(); drawSceneryPass(speed);
+            spawnEntities(deltaTime); updateEntities(deltaTime);
+
+            if (gameState !== 'PLAYING') return; // กันไว้ในกรณีชนกรวย หรือเกมหยุดตอนอัปเดต
+
+            obstacles.forEach(obs => drawCone(getLaneCenterX(obs.lane), obs.y, obs.size));
+            logos.forEach(logoItem => drawCompanyLogo(getLaneCenterX(logoItem.lane), logoItem.y, logoItem.size));
+            drawCar(player.currentX, player.y, player.width, player.height, player.currentRotation);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function menuLoop(timestamp) {
+            if (gameState !== 'MENU') return; frameCount++; ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let tempLevel = level; level = 1; let tempSpeed = speed; speed = 2.5; 
+            drawRoad(); drawSceneryPass(speed); level = tempLevel; speed = tempSpeed;
+            drawCar(getLaneCenterX(1), canvas.height - player.height - 40, player.width, player.height, Math.sin(frameCount*0.05)*0.02);
+            requestAnimationFrame(menuLoop);
+        }
+
+        function handleInput(e) {
+            if (gameState !== 'PLAYING') return; if (e.target.tagName !== 'BUTTON') e.preventDefault();
+            let clientX; if (e.type === 'touchstart') clientX = e.touches[0].clientX; else if (e.type === 'mousedown') clientX = e.clientX; else return;
+            if (clientX < canvas.width / 2) player.lane = Math.max(0, player.lane - 1); else player.lane = Math.min(LANES - 1, player.lane + 1);
+        }
+        window.addEventListener('touchstart', handleInput, {passive: false}); window.addEventListener('mousedown', handleInput);
+        window.addEventListener('keydown', (e) => { if (gameState !== 'PLAYING') return; if (e.key === 'ArrowLeft' || e.key === 'a') player.lane = Math.max(0, player.lane - 1); if (e.key === 'ArrowRight' || e.key === 'd') player.lane = Math.min(LANES - 1, player.lane + 1); });
+
+        function checkAndStartGame() {
+            const inputElement = document.getElementById('player-name-input'); const name = inputElement.value.trim();
+            if (!name) { showToastMsg("⚠️ กรุณากรอกชื่อก่อนเริ่มเกม!"); inputElement.focus(); return; }
+            playerName = name; inputElement.blur(); startGame();
+        }
+
+        function startGame() {
+            initAudio(); nextBeatTime = audioCtx.currentTime + 0.1;
+            mainMenu.classList.add('hidden'); gameOverScreen.classList.add('hidden'); confirmModal.classList.add('hidden'); tutorialModal.classList.add('hidden'); hud.classList.remove('hidden'); hellOverlay.classList.remove('active');
+            interstitialModal.classList.add('hidden'); // ซ่อนหน้าคั่นเผื่อกดเริ่มใหม่
+            
+            gameState = 'PLAYING'; distance = 0; score = 0; logosCollected = 0; level = 1; baseSpeed = 2.5; isScoreSubmitted = false;
+            finalImageDataUrl = ""; 
+            
+            distanceDisplay.innerText = distance; pointsDisplay.innerHTML = `${score} <span class="text-[10px] text-green-200">PTS</span>`; levelDisplay.innerText = level;
+            
+            frameCount = 0; player.lane = 1; player.currentX = getLaneCenterX(1); player.currentRotation = 0;
+            obstacles = []; logos = []; lastTime = performance.now(); requestAnimationFrame(gameLoop);
+        }
+
+        function endGame(reason, isWin) {
+            gameState = 'GAMEOVER'; stopEngineSound(); if(!isWin) playCrashSound();
+            
+            hud.classList.add('hidden'); gameOverScreen.classList.remove('hidden');
+            endTitle.innerText = isWin ? "YOU WIN!" : "GAME OVER";
+            endTitle.style.color = isWin ? "#10B981" : "#111111";
+            finalDistanceDisplay.innerText = distance; finalPointsDisplay.innerText = score; finalLevelDisplay.innerText = level; 
+            gameOverReason.innerText = "เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน"; 
+            
+            let isTop5 = false;
+            if (topScoresList.length < 5) {
+                isTop5 = true;
+            } else {
+                let fifthPlaceScore = topScoresList[4].score;
+                if (score > fifthPlaceScore) isTop5 = true; 
+            }
+
+            if (isTop5 && !isScoreSubmitted && score > 0) {
+                document.getElementById('top5-form').classList.remove('hidden');
+                document.getElementById('btn-submit-score').innerText = 'บันทึกคะแนนเพื่อลุ้นรางวัล';
+                document.getElementById('btn-submit-score').disabled = false;
+                document.getElementById('end-game-actions').classList.add('hidden');
+            } else {
+                document.getElementById('top5-form').classList.add('hidden');
+                document.getElementById('end-game-actions').classList.remove('hidden');
+            }
+
+            drawFinalCanvasState(isWin);
+        }
+
+        function requestRestart() { confirmModal.classList.remove('hidden'); }
+        function hideConfirmModal() { confirmModal.classList.add('hidden'); }
+        function restartGame() { startGame(); }
+        function showTutorial() { tutorialModal.classList.remove('hidden'); }
+        function hideTutorial() { tutorialModal.classList.add('hidden'); }
+
+        // ==========================================
+        // ส่วนวาดภาพ Background และ Save ภาพ (อัปเดตสำหรับมือถือ)
+        // ==========================================
+        function drawFinalCanvasState(isWin) {
+            const bgImages = ['1.jpg', '2.jpg', '3.jpg', '4.jpg'];
+            const selectedBgSrc = bgImages[Math.floor(Math.random() * bgImages.length)];
+            const bgImg = new Image();
+            
+            bgImg.src = selectedBgSrc;
+
+            bgImg.onload = function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                const canvasRatio = canvas.width / canvas.height;
+                const imgRatio = bgImg.width / bgImg.height;
+                let drawWidth, drawHeight, offsetX = 0, offsetY = 0;
+
+                if (canvasRatio > imgRatio) {
+                    drawWidth = canvas.width;
+                    drawHeight = canvas.width / imgRatio;
+                    offsetY = (canvas.height - drawHeight) / 2;
+                } else {
+                    drawHeight = canvas.height;
+                    drawWidth = canvas.height * imgRatio;
+                    offsetX = (canvas.width - drawWidth) / 2;
+                }
+                
+                ctx.drawImage(bgImg, offsetX, offsetY, drawWidth, drawHeight);
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.shadowColor = "rgba(0,0,0,0.8)";
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = 'center';
+
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 32px Kanit';
+                ctx.fillText('ผลการเล่นของคุณ!', canvas.width/2, canvas.height * 0.12);
+
+                ctx.fillStyle = '#FFD700'; 
+                ctx.font = 'bold 28px Kanit';
+                ctx.fillText('Driver: ' + playerName, canvas.width/2, canvas.height * 0.17);
+
+                ctx.fillStyle = isWin ? '#10B981' : '#FFD700'; 
+                ctx.font = 'bold 36px Kanit';
+                let statusText = isWin ? 'MISSION COMPLETED' : 'LEVEL ' + level;
+                ctx.fillText(statusText, canvas.width/2, canvas.height * 0.28);
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 60px Kanit'; 
+                ctx.fillText(distance + ' KM', canvas.width/2, canvas.height * 0.35); 
+
+                ctx.fillStyle = '#10B981'; 
+                ctx.font = 'bold 40px Kanit';
+                ctx.fillText('คะแนน: ' + score, canvas.width/2, canvas.height * 0.43);
+
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                try {
+                    finalImageDataUrl = canvas.toDataURL("image/jpeg", 0.95);
+                } catch (e) {
+                    console.error("ไม่สามารถแคปภาพได้ (อาจติดเรื่อง CORS):", e);
+                }
+            };
+
+            bgImg.onerror = function() {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 30px Kanit';
+                ctx.textAlign = 'center';
+                ctx.fillText('ERROR LOADING BG', canvas.width/2, canvas.height/2);
+            };
+        }
+
+        function saveScoreImage() {
+            if (!finalImageDataUrl) {
+                showToastMsg("กำลังเตรียมภาพให้ รอสักครู่นะครับ...");
+                return;
+            }
+
+            try {
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed';
+                modal.style.top = '0'; 
+                modal.style.left = '0'; 
+                modal.style.width = '100%'; 
+                modal.style.height = '100%';
+                modal.style.backgroundColor = 'rgba(0,0,0,0.95)';
+                modal.style.zIndex = '9999';
+                modal.style.display = 'flex'; 
+                modal.style.flexDirection = 'column'; 
+                modal.style.alignItems = 'center'; 
+                modal.style.justifyContent = 'center';
+                modal.style.padding = '20px';
+                
+                const text = document.createElement('p');
+                text.innerHTML = "👇 <b>แตะค้างที่รูปภาพ</b> เพื่อบันทึกลงเครื่อง 👇<br><span style='font-size:14px; color:#aaa;'>(ถ้าเล่นบนคอมพิวเตอร์ คลิกขวา > Save image as)</span>";
+                text.style.color = '#FFD700'; 
+                text.style.fontFamily = 'Kanit, sans-serif'; 
+                text.style.fontSize = '18px'; 
+                text.style.marginBottom = '20px';
+                text.style.textAlign = 'center';
+                
+                const img = document.createElement('img');
+                img.src = finalImageDataUrl; 
+                img.style.maxWidth = '100%'; 
+                img.style.maxHeight = '70vh';
+                img.style.borderRadius = '10px';
+                img.style.boxShadow = '0 0 20px rgba(255,255,255,0.2)';
+                
+                const closeBtn = document.createElement('button');
+                closeBtn.innerText = "✖ ปิดหน้าต่างนี้";
+                closeBtn.style.marginTop = '25px'; 
+                closeBtn.style.padding = '12px 30px'; 
+                closeBtn.style.background = '#E3000F'; 
+                closeBtn.style.color = 'white'; 
+                closeBtn.style.border = 'none'; 
+                closeBtn.style.borderRadius = '10px'; 
+                closeBtn.style.fontFamily = 'Kanit, sans-serif'; 
+                closeBtn.style.fontSize = '18px';
+                closeBtn.style.fontWeight = 'bold';
+                closeBtn.onclick = () => document.body.removeChild(modal);
+                
+                modal.appendChild(text);
+                modal.appendChild(img);
+                modal.appendChild(closeBtn);
+                document.body.appendChild(modal);
+
+            } catch (err) {
+                console.error("Save image popup error:", err);
+                showToastMsg("เกิดข้อผิดพลาดในการแสดงภาพ");
+            }
+        }
+
+        function copyReviewAndShare() {
+            const shareTexts = [
+                "เอารถมาเข้าศูนย์ อีซูซุสหะภัณฑ์ นั่งรอแบบเดือดๆ กับเกม \"ขับ D-Max ตะลุยนรก\" 🛻🔥 ซิ่งสุดมันส์ระหว่างรอรถ แถมได้ลุ้นกินชาบูฟรีสิ้นเดือนนี้ ใครสายซิ่งบวกสายกินห้ามพลาดเลยปะ!\n#อีซูซุสหะภัณฑ์กาญจนบุรี #อีซูซุสหะภัณฑ์เมืองกาญจน์ #อีซูซุสหะภัณฑ์ไม่ต้องรอนาน",
+                "มาเช็คระยะที่ อีซูซุสหะภัณฑ์ ทีไร มือมันสั่นอยากจับพวงมาลัย! นั่งปั่นเกม \"ขับ D-Max ตะลุยนรก\" ระหว่างรอรถ ซิ่งให้ยับแล้วไปลุ้นรับคูปองชาบูกันตอนสิ้นเดือน เริ่ดเกิ๊นนน 🎮🥩🔥\n#อีซูซุสหะภัณฑ์กาญจนบุรี #อีซูซุสหะภัณฑ์เมืองกาญจน์ #อีซูซุสหะภัณฑ์ไม่ต้องรอนาน",
+                "มาเข้าศูนย์ อีซูซุสหะภัณฑ์ ทั้งที จะนั่งรอเฉยๆ ได้ไง 😜 มาซิ่งฝ่าด่านเกม \"ขับ D-Max ตะลุยนรก\" เพลินๆ ลุ้นกินชาบูกันไปเลยยยย รอรถแป๊บเดียวแต่มันส์ทะลุปรอท คุ้มสุด! 🛻💨\n#อีซูซุสหะภัณฑ์กาญจนบุรี #อีซูซุสหะภัณฑ์เมืองกาญจน์ #อีซูซุสหะภัณฑ์ไม่ต้องรอนาน",
+                "ภารกิจหลัก: เอารถมาเข้าศูนย์ อีซูซุสหะภัณฑ์ 🚙 ภารกิจรอง: ซิ่งฝ่าด่านเกม \"ขับ D-Max ตะลุยนรก\" ลุ้นกินชาบูสิ้นเดือน 🤣 เล่นมันส์จัดๆ จนลืมไปเลยว่ามารอรถ! 🥩🔥\n#อีซูซุสหะภัณฑ์กาญจนบุรี #อีซูซุสหะภัณฑ์เมืองกาญจน์ #อีซูซุสหะภัณฑ์ไม่ต้องรอนาน",
+                "แวะมาดูแลลูกรักที่ อีซูซุสหะภัณฑ์ เค้ามีเกม \"ขับ D-Max ตะลุยนรก\" ให้ซิ่งแก้เบื่อด้วยนะ นั่งกดเพลินๆ ลุ้นกินชาบูฟรีสิ้นเดือนไปเลยจ้าาา สายซิ่งถูกใจสิ่งนี้ 💖🛻🍲\n#อีซูซุสหะภัณฑ์กาญจนบุรี #อีซูซุสหะภัณฑ์เมืองกาญจน์ #อีซูซุสหะภัณฑ์ไม่ต้องรอนาน"
+            ];
+            
+            let randomText = shareTexts[Math.floor(Math.random() * shareTexts.length)];
+            const fullText = `ผู้เล่น: ${playerName}\nระยะทางที่ทำได้: ${distance} KM\nคะแนนสะสม: ${score} PTS\n\n${randomText}`;
+            
+            const textArea = document.createElement("textarea"); 
+            textArea.value = fullText; 
+            textArea.style.top = "-9999px"; 
+            textArea.style.left = "-9999px"; 
+            textArea.style.position = "fixed"; 
+            document.body.appendChild(textArea); 
+            textArea.focus(); 
+            textArea.select();
+            
+            try { 
+                const successful = document.execCommand('copy'); 
+                if (successful) { 
+                    toast.innerHTML = "<span style='font-size: 20px; color: white; text-shadow: 0 2px 4px black;'>คัดลอกข้อความรีวิวแล้ว!</span>"; 
+                    toast.className = "show"; 
+                    setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 2000); 
+                } 
+            } catch (err) { 
+                console.error('Fallback: Oops, unable to copy', err); 
+            } 
+            document.body.removeChild(textArea);
+        }
+
+        document.addEventListener("visibilitychange", () => { if (document.hidden) { if(engineGain) engineGain.gain.value = 0; } else { if(gameState === 'PLAYING' && engineGain && soundEnabled) engineGain.gain.value = 0.05; } });
+        player.currentX = getLaneCenterX(1); requestAnimationFrame(menuLoop);
+    </script>
+</body>
+</html>
