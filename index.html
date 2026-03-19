@@ -11,13 +11,51 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #1a1a1a; user-select: none; touch-action: none; font-family: 'Kanit', sans-serif; }
-        canvas { display: block; width: 100vw; height: 100vh; }
+        /* 🌟 1. ล็อคขนาดจอและป้องกันการเลื่อนหลุด */
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000000;
+        }
+
+        /* 🌟 2. ล็อค body ให้ติดขอบจอ และจัดให้อยู่กึ่งกลางเสมอ */
+        body { 
+            margin: 0; 
+            position: fixed; 
+            top: 0; left: 0; right: 0; bottom: 0; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+            user-select: none; 
+            touch-action: none; /* ป้องกันเผลอปัดจอ */
+            font-family: 'Kanit', sans-serif; 
+        }
+
+        /* 🌟 3. ตีกรอบเกมส์ให้มีขนาดสูงสุดคงที่ (Letterboxing) */
+        #game-container { 
+            position: relative; 
+            width: 100%; 
+            height: 100%; 
+            max-width: 500px; 
+            max-height: 850px; 
+            background-color: #1a1a1a; 
+            overflow: hidden; 
+            box-shadow: 0 0 30px rgba(0,0,0,0.8); 
+            display: flex;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; }
         
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .pointer-events-auto { pointer-events: auto; }
         
-        #toast { visibility: hidden; position: fixed; z-index: 50; left: 50%; top: 15%; transform: translateX(-50%); font-size: 26px; font-weight: 900; color: #FFD700; text-shadow: 0px 4px 10px rgba(0,0,0,0.9), 0px 0px 20px rgba(255,215,0,0.8), 0px 0px 30px rgba(255,215,0,0.6); text-align: center; white-space: nowrap; pointer-events: none; }
+        /* 🌟 เปลี่ยน position ของ toast เป็น absolute เพื่อให้อยู่ในกรอบ */
+        #toast { visibility: hidden; position: absolute; z-index: 50; left: 50%; top: 15%; transform: translateX(-50%); font-size: 26px; font-weight: 900; color: #FFD700; text-shadow: 0px 4px 10px rgba(0,0,0,0.9), 0px 0px 20px rgba(255,215,0,0.8), 0px 0px 30px rgba(255,215,0,0.6); text-align: center; white-space: nowrap; pointer-events: none; }
         #toast.show { visibility: visible; animation: popin 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), fadeoutFloat 0.8s 1.2s forwards; }
         @keyframes popin { from {transform: translateX(-50%) scale(0.5); opacity: 0;} to {transform: translateX(-50%) scale(1); opacity: 1;} }
         @keyframes fadeoutFloat { from {opacity: 1; transform: translateX(-50%) scale(1) translateY(0);} to {opacity: 0; transform: translateX(-50%) scale(0.9) translateY(-30px);} }
@@ -35,165 +73,165 @@
 </head>
 <body>
 
-    <canvas id="gameCanvas"></canvas>
-    <div id="hell-overlay"></div>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="hell-overlay"></div>
 
-    <div id="ui-layer">
-        
-        <div id="main-menu" class="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] transition-opacity duration-300">
-            <h1 class="font-black mb-4 text-center drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)] italic tracking-wider uppercase leading-none">
-                <span class="text-[#E3000F] text-[3.5rem] sm:text-6xl">อีซูซุ</span><br>
-                <span class="text-[#10B981] text-4xl sm:text-5xl leading-tight">สหะภัณฑ์</span><br>
-                <span class="text-white text-3xl sm:text-4xl">D-Max ตะลุยด่าน</span>
-            </h1>
+        <div id="ui-layer">
             
-            <div class="bg-white/95 rounded-xl p-3 mb-4 w-full max-w-[280px] shadow-lg">
-                <h3 class="text-[#E3000F] font-bold text-center border-b-2 border-red-200 pb-1 mb-2 text-sm">🏆 Top 5 คะแนนสูงสุด</h3>
-                <ul id="leaderboard-ui" class="text-sm text-gray-800 space-y-1">
-                    <li class="text-center text-gray-500">กำลังโหลดข้อมูล...</li>
-                </ul>
-            </div>
-
-            <div class="w-full max-w-[280px] mb-4">
-                <input type="text" id="player-name-input" maxlength="20" placeholder="กรอกชื่อของคุณ (สูงสุด 20 ตัวอักษร)" 
-                       class="w-full px-4 py-3 rounded-xl border-2 border-transparent focus:border-[#E3000F] focus:outline-none text-center font-bold text-gray-900 bg-white/95 shadow-lg transition-colors">
-            </div>
-            
-            <div class="flex flex-col gap-3 w-full max-w-[280px]">
-                <button onclick="checkAndStartGame()" class="w-full bg-[#E3000F] text-white py-3 rounded-full font-bold text-xl uppercase tracking-widest shadow-[0_0_20px_rgba(227,0,15,0.7)] active:scale-95 transition-transform border-2 border-white/30">
-                    Start Game
-                </button>
-                <button onclick="showTutorial()" class="w-full bg-gray-900/90 text-white py-2 rounded-full font-bold text-md uppercase tracking-wider shadow-lg active:scale-95 transition-transform border border-gray-500 backdrop-blur-sm">
-                    วิธีเล่น / กติกา
-                </button>
-            </div>
-        </div>
-
-        <div id="hud" class="hidden absolute top-0 left-0 w-full p-2 flex flex-col gap-1 pointer-events-none z-10 pt-4">
-            <div class="flex justify-between px-4 mt-2">
-                <div class="flex flex-col text-left">
-                    <p class="text-white text-2xl font-black leading-none text-outline tracking-wider"><span id="distance-display">0</span> <span class="text-sm text-gray-200">KM</span></p>
-                    <p class="text-green-400 text-xl font-black leading-none mt-1 text-outline transition-transform" id="points-display">0 <span class="text-xs text-green-200">PTS</span></p>
-                </div>
-                <div class="flex flex-col text-right">
-                    <p id="level-text" class="text-yellow-400 text-2xl font-black leading-none text-outline">LV <span id="level-display">1</span></p>
-                </div>
-            </div>
-        </div>
-
-        <div id="interstitial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300 p-6">
-            <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
-                <div class="absolute top-0 left-0 w-full h-3 bg-[#E3000F]"></div>
-                <h2 class="text-3xl font-extrabold text-[#E3000F] mb-4 mt-2">💡 เกร็ดความรู้!</h2>
+            <div id="main-menu" class="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] transition-opacity duration-300">
+                <h1 class="font-black mb-4 text-center drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)] italic tracking-wider uppercase leading-none">
+                    <span class="text-[#E3000F] text-[3.5rem] sm:text-6xl">อีซูซุ</span><br>
+                    <span class="text-[#10B981] text-4xl sm:text-5xl leading-tight">สหะภัณฑ์</span><br>
+                    <span class="text-white text-3xl sm:text-4xl">D-Max ตะลุยด่าน</span>
+                </h1>
                 
-                <img id="interstitial-img" src="" alt="Knowledge" class="w-full rounded-xl mb-4 border-2 border-gray-100 shadow-sm">
-                <p id="interstitial-text" class="text-gray-800 font-bold mb-6 text-sm leading-relaxed"></p>
-                
-                <button onclick="resumeGame()" class="w-full bg-[#10B981] text-white py-3 rounded-xl font-bold uppercase active:scale-95 transition-transform shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]">
-                    ลุยด่านต่อไป! (CONTINUE)
-                </button>
-            </div>
-        </div>
-
-        <div id="game-over" class="hidden pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300 p-6 z-40">
-            <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
-                <div class="absolute top-0 left-0 w-full h-3 bg-[#E3000F]"></div>
-                <h2 id="end-title" class="text-4xl font-extrabold text-gray-900 mb-1 mt-2">GAME OVER</h2>
-                <p id="game-over-reason" class="text-[#E3000F] font-bold mb-4 bg-red-50 py-1 px-2 rounded-full text-sm border border-red-100">เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน</p>
-                
-                <div class="grid grid-cols-3 gap-2 mb-6">
-                    <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
-                        <p class="text-gray-500 text-[10px] font-bold uppercase">ระยะทาง</p>
-                        <p class="text-xl font-black text-[#E3000F] leading-none mt-1"><span id="final-distance">0</span><br><span class="text-xs text-gray-800">KM</span></p>
-                    </div>
-                    <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
-                        <p class="text-gray-500 text-[10px] font-bold uppercase">คะแนน</p>
-                        <p class="text-2xl font-black text-green-500 leading-none mt-1" id="final-points">0</p>
-                    </div>
-                    <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
-                        <p class="text-gray-500 text-[10px] font-bold uppercase">เลเวล</p>
-                        <p class="text-xl font-black text-yellow-500 leading-none mt-1">LV <span id="final-level">1</span></p>
-                    </div>
+                <div class="bg-white/95 rounded-xl p-3 mb-4 w-full max-w-[280px] shadow-lg">
+                    <h3 class="text-[#E3000F] font-bold text-center border-b-2 border-red-200 pb-1 mb-2 text-sm">🏆 Top 5 คะแนนสูงสุด</h3>
+                    <ul id="leaderboard-ui" class="text-sm text-gray-800 space-y-1">
+                        <li class="text-center text-gray-500">กำลังโหลดข้อมูล...</li>
+                    </ul>
                 </div>
 
-                <div id="top5-form" class="hidden bg-red-50 p-4 rounded-xl border border-red-200 mb-4 text-left">
-                    <h3 class="text-[#E3000F] font-bold text-lg mb-1">🎉 ยินดีด้วย! คุณติดอันดับ Top 5</h3>
-                    <p class="text-xs text-gray-600 mb-3">กรุณากรอกเบอร์โทรศัพท์เพื่อบันทึกสถิติและรับสิทธิ์ลุ้นรางวัล</p>
-                    <input type="tel" id="player-phone-input" placeholder="เบอร์โทรศัพท์ 10 หลัก" maxlength="10" 
-                           class="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-[#E3000F] focus:outline-none text-center font-bold mb-2 font-sans">
-                    <p class="text-[10px] text-gray-500 text-center mb-3">*ข้อมูลของท่านจะถูกเก็บเป็นความลับและใช้สำหรับติดต่อมอบรางวัลโดยอีซูซุสหะภัณฑ์เท่านั้น</p>
-                    <button onclick="submitTop5Score()" id="btn-submit-score" class="w-full bg-[#E3000F] text-white py-2 rounded-lg font-bold shadow-md hover:bg-red-700 active:scale-95 transition-all">บันทึกคะแนนเพื่อลุ้นรางวัล</button>
+                <div class="w-full max-w-[280px] mb-4">
+                    <input type="text" id="player-name-input" maxlength="20" placeholder="กรอกชื่อของคุณ (สูงสุด 20 ตัวอักษร)" 
+                           class="w-full px-4 py-3 rounded-xl border-2 border-transparent focus:border-[#E3000F] focus:outline-none text-center font-bold text-gray-900 bg-white/95 shadow-lg transition-colors">
                 </div>
-
-                <div id="end-game-actions" class="flex flex-col gap-3">
-                    <button onclick="saveScoreImage()" class="flex items-center justify-center gap-2 w-full bg-gray-900 text-white px-4 py-3 rounded-xl font-semibold hover:bg-black active:scale-95 transition-all">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                        Save Score Image
+                
+                <div class="flex flex-col gap-3 w-full max-w-[280px]">
+                    <button onclick="checkAndStartGame()" class="w-full bg-[#E3000F] text-white py-3 rounded-full font-bold text-xl uppercase tracking-widest shadow-[0_0_20px_rgba(227,0,15,0.7)] active:scale-95 transition-transform border-2 border-white/30">
+                        Start Game
                     </button>
-                    <button onclick="copyReviewAndShare()" class="flex items-center justify-center gap-2 w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                        Copy Review & Share
-                    </button>
-                    <button onclick="requestRestart()" class="flex items-center justify-center gap-2 w-full bg-[#E3000F] text-white px-4 py-3 rounded-xl font-bold uppercase mt-2 active:scale-95 transition-all border-2 border-transparent">
-                        Play Again
+                    <button onclick="showTutorial()" class="w-full bg-gray-900/90 text-white py-2 rounded-full font-bold text-md uppercase tracking-wider shadow-lg active:scale-95 transition-transform border border-gray-500 backdrop-blur-sm">
+                        วิธีเล่น / กติกา
                     </button>
                 </div>
             </div>
-        </div>
 
-        <div id="confirm-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div class="bg-white rounded-2xl p-6 w-full max-w-[320px] text-center shadow-2xl">
-                <h3 class="text-2xl font-bold text-gray-900 mb-2">เริ่มเกมใหม่?</h3>
-                <p class="text-gray-600 mb-6 font-medium">คุณต้องการเริ่มเล่นรอบใหม่<br>ใช่หรือไม่?</p>
-                <div class="flex gap-3">
-                    <button onclick="hideConfirmModal()" class="flex-1 bg-gray-200 text-gray-800 py-3 rounded-xl font-bold hover:bg-gray-300 transition-colors">ยกเลิก</button>
-                    <button onclick="restartGame()" class="flex-1 bg-[#E3000F] text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors">ตกลง</button>
+            <div id="hud" class="hidden absolute top-0 left-0 w-full p-2 flex flex-col gap-1 pointer-events-none z-10 pt-4">
+                <div class="flex justify-between px-4 mt-2">
+                    <div class="flex flex-col text-left">
+                        <p class="text-white text-2xl font-black leading-none text-outline tracking-wider"><span id="distance-display">0</span> <span class="text-sm text-gray-200">KM</span></p>
+                        <p class="text-green-400 text-xl font-black leading-none mt-1 text-outline transition-transform" id="points-display">0 <span class="text-xs text-green-200">PTS</span></p>
+                    </div>
+                    <div class="flex flex-col text-right">
+                        <p id="level-text" class="text-yellow-400 text-2xl font-black leading-none text-outline">LV <span id="level-display">1</span></p>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div id="tutorial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-            <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative flex flex-col max-h-[90vh]">
-                <div class="absolute top-0 left-0 w-full h-3 bg-gray-800"></div>
-                <h2 class="text-3xl font-extrabold text-gray-900 mb-4 mt-2 text-center">วิธีเล่น และ กติกา</h2>
-                
-                <div class="overflow-y-auto flex-1 pr-2 space-y-4 text-left custom-scrollbar">
-                    <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                        <h3 class="font-bold text-[#E3000F] text-lg mb-1">การควบคุม</h3>
-                        <p class="text-sm text-gray-700">แตะหน้าจอฝั่ง <b class="text-black">ซ้าย</b> หรือ <b class="text-black">ขวา</b> เพื่อให้รถเปลี่ยนเลน</p>
-                    </div>
+            <div id="interstitial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300 p-6">
+                <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-3 bg-[#E3000F]"></div>
+                    <h2 class="text-3xl font-extrabold text-[#E3000F] mb-4 mt-2">💡 เกร็ดความรู้!</h2>
                     
-                    <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                        <h3 class="font-bold text-[#E3000F] text-lg mb-2">ไอเทมและสิ่งกีดขวาง</h3>
-                        <ul class="text-sm text-gray-700 space-y-3">
-                            <li class="flex items-start gap-3">
-                                <span class="text-2xl leading-none">🚧</span> 
-                                <div><b class="text-red-600">กรวยจราจร:</b> ห้ามชนเด็ดขาด! ชนปุ๊บเกมจบปั๊บ</div>
-                            </li>
-                            <li class="flex items-start gap-3">
-                                <span class="text-2xl leading-none">🛡️</span> 
-                                <div><b class="text-blue-600">โลโก้ <span class="text-[#E3000F]">ISUZU</span>:</b> สะสมเพื่อรับคะแนนแบบสุ่ม (50 - 100 คะแนน)</div>
-                            </li>
-                        </ul>
+                    <img id="interstitial-img" src="" alt="Knowledge" class="w-full rounded-xl mb-4 border-2 border-gray-100 shadow-sm">
+                    <p id="interstitial-text" class="text-gray-800 font-bold mb-6 text-sm leading-relaxed"></p>
+                    
+                    <button onclick="resumeGame()" class="w-full bg-[#10B981] text-white py-3 rounded-xl font-bold uppercase active:scale-95 transition-transform shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]">
+                        ลุยด่านต่อไป! (CONTINUE)
+                    </button>
+                </div>
+            </div>
+
+            <div id="game-over" class="hidden pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300 p-6 z-40">
+                <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-3 bg-[#E3000F]"></div>
+                    <h2 id="end-title" class="text-4xl font-extrabold text-gray-900 mb-1 mt-2">GAME OVER</h2>
+                    <p id="game-over-reason" class="text-[#E3000F] font-bold mb-4 bg-red-50 py-1 px-2 rounded-full text-sm border border-red-100">เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน</p>
+                    
+                    <div class="grid grid-cols-3 gap-2 mb-6">
+                        <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
+                            <p class="text-gray-500 text-[10px] font-bold uppercase">ระยะทาง</p>
+                            <p class="text-xl font-black text-[#E3000F] leading-none mt-1"><span id="final-distance">0</span><br><span class="text-xs text-gray-800">KM</span></p>
+                        </div>
+                        <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
+                            <p class="text-gray-500 text-[10px] font-bold uppercase">คะแนน</p>
+                            <p class="text-2xl font-black text-green-500 leading-none mt-1" id="final-points">0</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200 flex flex-col justify-center">
+                            <p class="text-gray-500 text-[10px] font-bold uppercase">เลเวล</p>
+                            <p class="text-xl font-black text-yellow-500 leading-none mt-1">LV <span id="final-level">1</span></p>
+                        </div>
                     </div>
 
-                    <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                        <h3 class="font-bold text-[#E3000F] text-lg mb-2">กติกาพิเศษ</h3>
-                        <p class="text-sm text-gray-700">ขับให้ไกลที่สุด รถจะเร็วขึ้นเมื่อถึงกิโลเมตรที่ 100 และเกมจะจบอย่างสมบูรณ์เมื่อคุณวิ่งถึง <b>1,000 กิโลเมตร (จบ 10 ด่าน)</b></p>
+                    <div id="top5-form" class="hidden bg-red-50 p-4 rounded-xl border border-red-200 mb-4 text-left">
+                        <h3 class="text-[#E3000F] font-bold text-lg mb-1">🎉 ยินดีด้วย! คุณติดอันดับ Top 5</h3>
+                        <p class="text-xs text-gray-600 mb-3">กรุณากรอกเบอร์โทรศัพท์เพื่อบันทึกสถิติและรับสิทธิ์ลุ้นรางวัล</p>
+                        <input type="tel" id="player-phone-input" placeholder="เบอร์โทรศัพท์ 10 หลัก" maxlength="10" 
+                               class="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-[#E3000F] focus:outline-none text-center font-bold mb-2 font-sans">
+                        <p class="text-[10px] text-gray-500 text-center mb-3">*ข้อมูลของท่านจะถูกเก็บเป็นความลับและใช้สำหรับติดต่อมอบรางวัลโดยอีซูซุสหะภัณฑ์เท่านั้น</p>
+                        <button onclick="submitTop5Score()" id="btn-submit-score" class="w-full bg-[#E3000F] text-white py-2 rounded-lg font-bold shadow-md hover:bg-red-700 active:scale-95 transition-all">บันทึกคะแนนเพื่อลุ้นรางวัล</button>
+                    </div>
+
+                    <div id="end-game-actions" class="flex flex-col gap-3">
+                        <button onclick="saveScoreImage()" class="flex items-center justify-center gap-2 w-full bg-gray-900 text-white px-4 py-3 rounded-xl font-semibold hover:bg-black active:scale-95 transition-all">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                            Save Score Image
+                        </button>
+                        <button onclick="copyReviewAndShare()" class="flex items-center justify-center gap-2 w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                            Copy Review & Share
+                        </button>
+                        <button onclick="requestRestart()" class="flex items-center justify-center gap-2 w-full bg-[#E3000F] text-white px-4 py-3 rounded-xl font-bold uppercase mt-2 active:scale-95 transition-all border-2 border-transparent">
+                            Play Again
+                        </button>
                     </div>
                 </div>
-
-                <button onclick="hideTutorial()" class="w-full bg-gray-900 text-white py-3 rounded-xl font-bold mt-4 hover:bg-black active:scale-95 transition-colors">
-                    เข้าใจแล้ว ปิดหน้าต่าง
-                </button>
             </div>
+
+            <div id="confirm-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                <div class="bg-white rounded-2xl p-6 w-full max-w-[320px] text-center shadow-2xl">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">เริ่มเกมใหม่?</h3>
+                    <p class="text-gray-600 mb-6 font-medium">คุณต้องการเริ่มเล่นรอบใหม่<br>ใช่หรือไม่?</p>
+                    <div class="flex gap-3">
+                        <button onclick="hideConfirmModal()" class="flex-1 bg-gray-200 text-gray-800 py-3 rounded-xl font-bold hover:bg-gray-300 transition-colors">ยกเลิก</button>
+                        <button onclick="restartGame()" class="flex-1 bg-[#E3000F] text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors">ตกลง</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tutorial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+                <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative flex flex-col max-h-[90vh]">
+                    <div class="absolute top-0 left-0 w-full h-3 bg-gray-800"></div>
+                    <h2 class="text-3xl font-extrabold text-gray-900 mb-4 mt-2 text-center">วิธีเล่น และ กติกา</h2>
+                    
+                    <div class="overflow-y-auto flex-1 pr-2 space-y-4 text-left custom-scrollbar">
+                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                            <h3 class="font-bold text-[#E3000F] text-lg mb-1">การควบคุม</h3>
+                            <p class="text-sm text-gray-700">แตะหน้าจอฝั่ง <b class="text-black">ซ้าย</b> หรือ <b class="text-black">ขวา</b> เพื่อให้รถเปลี่ยนเลน</p>
+                        </div>
+                        
+                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                            <h3 class="font-bold text-[#E3000F] text-lg mb-2">ไอเทมและสิ่งกีดขวาง</h3>
+                            <ul class="text-sm text-gray-700 space-y-3">
+                                <li class="flex items-start gap-3">
+                                    <span class="text-2xl leading-none">🚧</span> 
+                                    <div><b class="text-red-600">กรวยจราจร:</b> ห้ามชนเด็ดขาด! ชนปุ๊บเกมจบปั๊บ</div>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <span class="text-2xl leading-none">🛡️</span> 
+                                    <div><b class="text-blue-600">โลโก้ <span class="text-[#E3000F]">ISUZU</span>:</b> สะสมเพื่อรับคะแนนแบบสุ่ม (50 - 100 คะแนน)</div>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                            <h3 class="font-bold text-[#E3000F] text-lg mb-2">กติกาพิเศษ</h3>
+                            <p class="text-sm text-gray-700">ขับให้ไกลที่สุด รถจะเร็วขึ้นเมื่อถึงกิโลเมตรที่ 100 และเกมจะจบอย่างสมบูรณ์เมื่อคุณวิ่งถึง <b>1,000 กิโลเมตร (จบ 10 ด่าน)</b></p>
+                        </div>
+                    </div>
+
+                    <button onclick="hideTutorial()" class="w-full bg-gray-900 text-white py-3 rounded-xl font-bold mt-4 hover:bg-black active:scale-95 transition-colors">
+                        เข้าใจแล้ว ปิดหน้าต่าง
+                    </button>
+                </div>
+            </div>
+
         </div>
 
-    </div>
-
-    <div id="toast">LEVEL UP!</div>
-
-    <script>
+        <div id="toast">LEVEL UP!</div>
+    </div> <script>
         // ==========================================
         // ตัวแปรสำคัญสำหรับแก้ภาพดำบนมือถือ
         // ==========================================
@@ -298,6 +336,7 @@
         // ==========================================
         // Game Setup & Audio
         // ==========================================
+        const gameContainer = document.getElementById('game-container'); // 🌟 เพิ่มตัวแปรคอนเทนเนอร์
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
@@ -352,7 +391,7 @@
         const finalDistanceDisplay = document.getElementById('final-distance'), finalPointsDisplay = document.getElementById('final-points'), finalLevelDisplay = document.getElementById('final-level');
         const endTitle = document.getElementById('end-title'), gameOverReason = document.getElementById('game-over-reason'), hellOverlay = document.getElementById('hell-overlay');
         const confirmModal = document.getElementById('confirm-modal'), tutorialModal = document.getElementById('tutorial-modal'), toast = document.getElementById('toast');
-        const interstitialModal = document.getElementById('interstitial-modal'); // 🌟 ตัวแปร UI หน้าคั่น
+        const interstitialModal = document.getElementById('interstitial-modal'); 
 
         const logoImg = new Image(); 
         logoImg.src = '1000631943.jpg';
@@ -375,11 +414,21 @@
         let obstacles = [], logos = [];
         let laneWidth = 0, shoulderWidth = 0;
 
+        // 🌟 4. แก้ไขฟังก์ชัน resize ให้วัดขนาดจาก #game-container แทน window
         function resize() {
-            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-            shoulderWidth = canvas.width * 0.12; const playableWidth = canvas.width - (shoulderWidth * 2); laneWidth = playableWidth / LANES;
-            player.width = laneWidth * 0.55; player.height = player.width * 2.2; player.y = canvas.height - player.height - 40;
+            const rect = gameContainer.getBoundingClientRect();
+            canvas.width = rect.width; 
+            canvas.height = rect.height;
+            
+            shoulderWidth = canvas.width * 0.12; 
+            const playableWidth = canvas.width - (shoulderWidth * 2); 
+            laneWidth = playableWidth / LANES;
+            
+            player.width = laneWidth * 0.55; 
+            player.height = player.width * 2.2; 
+            player.y = canvas.height - player.height - 40;
             player.targetX = getLaneCenterX(player.lane);
+            
             if(gameState !== 'PLAYING' && player.currentX === 0) player.currentX = player.targetX;
         }
         window.addEventListener('resize', resize); resize();
@@ -463,10 +512,9 @@
         // 🌟 2. ระบบดึงภาพและข้อความมาหยุดเกม (Pause)
         // ==========================================
         function showInterstitial(currentLevel) {
-            gameState = 'INTERSTITIAL'; // สั่งเปลี่ยนสถานะ ทำให้ loop เกมหยุดอัปเดต
+            gameState = 'INTERSTITIAL'; 
             stopEngineSound();
 
-            // คำนวณหา index ว่าต้องโชว์ภาพไหน (LV2=0, LV4=1, LV6=2, LV8=3, LV10=4)
             const index = (currentLevel / 2) - 1;
             const promo = promoData[index];
 
@@ -483,11 +531,10 @@
             interstitialModal.classList.add('hidden');
             gameState = 'PLAYING';
             
-            // รีเซ็ตเวลาเพื่อป้องกันบัค deltaTime พุ่ง (ที่ทำให้รถพุ่งเร็วเกินไปตอนกดเริ่มต่อ)
             lastTime = performance.now(); 
             
             if (soundEnabled) updateEngineSound(speed);
-            requestAnimationFrame(gameLoop); // สั่งรัน loop ต่อ
+            requestAnimationFrame(gameLoop); 
         }
 
         // --- Logic ---
@@ -500,7 +547,6 @@
             else { showLevelUpToast(`LEVEL ${level}! <br><span style="font-size:20px; color:#ffffff;">ความเร็วเพิ่มขึ้น!</span>`); }
             playLevelUpSound();
 
-            // 🌟 เช็คว่าผ่านระดับที่หาร 2 ลงตัวหรือเปล่า (2, 4, 6, 8, 10)
             if (level % 2 === 0) {
                 showInterstitial(level);
             }
@@ -568,7 +614,7 @@
         }
 
         function gameLoop(timestamp) {
-            if (gameState !== 'PLAYING') return; // 🌟 ถ้าไม่ได้อยู่ในสถานะ PLAYING บรรทัดนี้จะเตะออก ทำให้เกมหยุดทันที
+            if (gameState !== 'PLAYING') return; 
             
             const deltaTime = timestamp - lastTime; lastTime = timestamp; frameCount++;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -576,7 +622,7 @@
             drawRoad(); drawSceneryPass(speed);
             spawnEntities(deltaTime); updateEntities(deltaTime);
 
-            if (gameState !== 'PLAYING') return; // กันไว้ในกรณีชนกรวย หรือเกมหยุดตอนอัปเดต
+            if (gameState !== 'PLAYING') return; 
 
             obstacles.forEach(obs => drawCone(getLaneCenterX(obs.lane), obs.y, obs.size));
             logos.forEach(logoItem => drawCompanyLogo(getLaneCenterX(logoItem.lane), logoItem.y, logoItem.size));
@@ -594,9 +640,12 @@
         }
 
         function handleInput(e) {
-            if (gameState !== 'PLAYING') return; if (e.target.tagName !== 'BUTTON') e.preventDefault();
+            if (gameState !== 'PLAYING') return; if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') e.preventDefault();
             let clientX; if (e.type === 'touchstart') clientX = e.touches[0].clientX; else if (e.type === 'mousedown') clientX = e.clientX; else return;
-            if (clientX < canvas.width / 2) player.lane = Math.max(0, player.lane - 1); else player.lane = Math.min(LANES - 1, player.lane + 1);
+            // 🌟 แก้ไขการจิ้มเปลี่ยนเลนให้คำนวณจากความกว้างของหน้าจอเกมจริงๆ
+            const rect = gameContainer.getBoundingClientRect();
+            const clickX = clientX - rect.left;
+            if (clickX < canvas.width / 2) player.lane = Math.max(0, player.lane - 1); else player.lane = Math.min(LANES - 1, player.lane + 1);
         }
         window.addEventListener('touchstart', handleInput, {passive: false}); window.addEventListener('mousedown', handleInput);
         window.addEventListener('keydown', (e) => { if (gameState !== 'PLAYING') return; if (e.key === 'ArrowLeft' || e.key === 'a') player.lane = Math.max(0, player.lane - 1); if (e.key === 'ArrowRight' || e.key === 'd') player.lane = Math.min(LANES - 1, player.lane + 1); });
@@ -610,7 +659,7 @@
         function startGame() {
             initAudio(); nextBeatTime = audioCtx.currentTime + 0.1;
             mainMenu.classList.add('hidden'); gameOverScreen.classList.add('hidden'); confirmModal.classList.add('hidden'); tutorialModal.classList.add('hidden'); hud.classList.remove('hidden'); hellOverlay.classList.remove('active');
-            interstitialModal.classList.add('hidden'); // ซ่อนหน้าคั่นเผื่อกดเริ่มใหม่
+            interstitialModal.classList.add('hidden'); 
             
             gameState = 'PLAYING'; distance = 0; score = 0; logosCollected = 0; level = 1; baseSpeed = 2.5; isScoreSubmitted = false;
             finalImageDataUrl = ""; 
