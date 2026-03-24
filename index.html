@@ -11,7 +11,6 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <style>
-        /* 🌟 1. ล็อคขนาดจอและป้องกันการเลื่อนหลุด */
         html, body {
             width: 100%;
             height: 100%;
@@ -19,7 +18,6 @@
             background-color: #000000;
         }
 
-        /* 🌟 2. ล็อค body ให้ติดขอบจอ และจัดให้อยู่กึ่งกลางเสมอ */
         body { 
             margin: 0; 
             position: fixed; 
@@ -32,11 +30,10 @@
             padding-left: env(safe-area-inset-left);
             padding-right: env(safe-area-inset-right);
             user-select: none; 
-            touch-action: none; /* ป้องกันเผลอปัดจอ */
+            touch-action: none; 
             font-family: 'Kanit', sans-serif; 
         }
 
-        /* 🌟 3. ตีกรอบเกมส์ให้มีขนาดสูงสุดคงที่ (Letterboxing) */
         #game-container { 
             position: relative; 
             width: 100%; 
@@ -54,7 +51,6 @@
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .pointer-events-auto { pointer-events: auto; }
         
-        /* 🌟 เปลี่ยน position ของ toast เป็น absolute เพื่อให้อยู่ในกรอบ */
         #toast { visibility: hidden; position: absolute; z-index: 50; left: 50%; top: 15%; transform: translateX(-50%); font-size: 26px; font-weight: 900; color: #FFD700; text-shadow: 0px 4px 10px rgba(0,0,0,0.9), 0px 0px 20px rgba(255,215,0,0.8), 0px 0px 30px rgba(255,215,0,0.6); text-align: center; white-space: nowrap; pointer-events: none; }
         #toast.show { visibility: visible; animation: popin 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), fadeoutFloat 0.8s 1.2s forwards; }
         @keyframes popin { from {transform: translateX(-50%) scale(0.5); opacity: 0;} to {transform: translateX(-50%) scale(1); opacity: 1;} }
@@ -68,7 +64,6 @@
         #hell-overlay { position: absolute; inset: 0; box-shadow: inset 0 0 100px 20px rgba(255, 0, 0, 0.5); pointer-events: none; opacity: 0; transition: opacity 2s ease-in-out; }
         #hell-overlay.active { opacity: 1; }
         .text-outline { text-shadow: 0px 2px 4px rgba(0,0,0,0.8), 0px 0px 2px rgba(0,0,0,1); }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body>
@@ -80,20 +75,29 @@
         <div id="ui-layer">
             
             <div id="main-menu" class="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] transition-opacity duration-300">
-                <h1 class="font-black mb-4 text-center drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)] italic tracking-wider uppercase leading-none">
+                <h1 class="font-black mb-3 text-center drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)] italic tracking-wider uppercase leading-none">
                     <span class="text-[#E3000F] text-[3.5rem] sm:text-6xl">อีซูซุ</span><br>
                     <span class="text-[#10B981] text-4xl sm:text-5xl leading-tight">สหะภัณฑ์</span><br>
                     <span class="text-white text-3xl sm:text-4xl">D-Max ตะลุยด่าน</span>
                 </h1>
                 
-                <div class="bg-white/95 rounded-xl p-3 mb-4 w-full max-w-[280px] shadow-lg">
-                    <h3 class="text-[#E3000F] font-bold text-center border-b-2 border-red-200 pb-1 mb-2 text-sm">🏆 Top 5 คะแนนสูงสุด</h3>
+                <div class="bg-white/95 rounded-xl p-3 mb-3 w-full max-w-[280px] shadow-lg">
+                    <h3 class="text-[#E3000F] font-bold text-center border-b-2 border-red-200 pb-1 mb-2 text-sm">🏆 Top 3 คะแนนสูงสุด</h3>
                     <ul id="leaderboard-ui" class="text-sm text-gray-800 space-y-1">
                         <li class="text-center text-gray-500">กำลังโหลดข้อมูล...</li>
                     </ul>
                 </div>
 
-                <div class="w-full max-w-[280px] mb-4">
+                <div class="bg-white/95 rounded-xl p-3 mb-3 w-full max-w-[280px] shadow-lg text-left text-[0.8rem] text-gray-800">
+                    <strong class="text-[#E3000F] block mb-1">📌 กติกาการเล่น:</strong>
+                    <ul class="list-disc pl-4 space-y-1">
+                        <li>แตะหน้าจอ <b class="text-black">ซ้าย-ขวา</b> เพื่อสลับเลนรถ</li>
+                        <li><b class="text-red-600">ห้ามชนกรวยจราจรเด็ดขาด!</b></li>
+                        <li>ขับให้ไกล และเก็บโลโก้ ISUZU เพื่อทำคะแนน</li>
+                    </ul>
+                </div>
+
+                <div class="w-full max-w-[280px] mb-3">
                     <input type="text" id="player-name-input" maxlength="20" placeholder="กรอกชื่อของคุณ (สูงสุด 20 ตัวอักษร)" 
                            class="w-full px-4 py-3 rounded-xl border-2 border-transparent focus:border-[#E3000F] focus:outline-none text-center font-bold text-gray-900 bg-white/95 shadow-lg transition-colors">
                 </div>
@@ -101,9 +105,6 @@
                 <div class="flex flex-col gap-3 w-full max-w-[280px]">
                     <button onclick="checkAndStartGame()" class="w-full bg-[#E3000F] text-white py-3 rounded-full font-bold text-xl uppercase tracking-widest shadow-[0_0_20px_rgba(227,0,15,0.7)] active:scale-95 transition-transform border-2 border-white/30">
                         Start Game
-                    </button>
-                    <button onclick="showTutorial()" class="w-full bg-gray-900/90 text-white py-2 rounded-full font-bold text-md uppercase tracking-wider shadow-lg active:scale-95 transition-transform border border-gray-500 backdrop-blur-sm">
-                        วิธีเล่น / กติกา
                     </button>
                 </div>
             </div>
@@ -120,16 +121,17 @@
                 </div>
             </div>
 
-            <div id="interstitial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300 p-6">
-                <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
-                    <div class="absolute top-0 left-0 w-full h-3 bg-[#E3000F]"></div>
-                    <h2 class="text-3xl font-extrabold text-[#E3000F] mb-4 mt-2">💡 เกร็ดความรู้!</h2>
+            <div id="interstitial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300 p-4">
+                <div class="bg-white rounded-2xl p-5 w-full max-w-[320px] text-center shadow-2xl relative overflow-hidden">
+                    <button onclick="startGame()" class="absolute top-2 right-2 bg-red-100 text-[#E3000F] hover:bg-red-200 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm transition-colors">✖</button>
+                    <div class="absolute top-0 left-0 w-full h-2 bg-[#E3000F]"></div>
+                    <h2 class="text-xl font-extrabold text-[#E3000F] mb-3 mt-2">💡 เกร็ดความรู้!</h2>
                     
-                    <img id="interstitial-img" src="" alt="Knowledge" class="w-full rounded-xl mb-4 border-2 border-gray-100 shadow-sm">
-                    <p id="interstitial-text" class="text-gray-800 font-bold mb-6 text-sm leading-relaxed"></p>
+                    <img id="interstitial-img" src="" alt="Knowledge" class="w-full max-h-[130px] object-contain rounded-xl mb-3 border border-gray-100 shadow-sm">
+                    <p id="interstitial-text" class="text-gray-800 font-bold mb-4 text-[0.85rem] leading-relaxed"></p>
                     
-                    <button onclick="resumeGame()" class="w-full bg-[#10B981] text-white py-3 rounded-xl font-bold uppercase active:scale-95 transition-transform shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]">
-                        ลุยด่านต่อไป! (CONTINUE)
+                    <button onclick="startGame()" class="w-full bg-[#10B981] text-white py-3 rounded-xl font-bold uppercase active:scale-95 transition-transform shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]">
+                        เข้าสู่เกม (START)
                     </button>
                 </div>
             </div>
@@ -156,13 +158,13 @@
                         </div>
                     </div>
 
-                    <div id="top5-form" class="hidden bg-red-50 p-4 rounded-xl border border-red-200 mb-4 text-left">
-                        <h3 class="text-[#E3000F] font-bold text-lg mb-1">🎉 ยินดีด้วย! คุณติดอันดับ Top 5</h3>
+                    <div id="top3-form" class="hidden bg-red-50 p-4 rounded-xl border border-red-200 mb-4 text-left">
+                        <h3 class="text-[#E3000F] font-bold text-lg mb-1">🎉 ยินดีด้วย! คุณติดอันดับ Top 3</h3>
                         <p class="text-xs text-gray-600 mb-3">กรุณากรอกเบอร์โทรศัพท์เพื่อบันทึกสถิติและรับสิทธิ์ลุ้นรางวัล</p>
                         <input type="tel" id="player-phone-input" placeholder="เบอร์โทรศัพท์ 10 หลัก" maxlength="10" 
                                class="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-[#E3000F] focus:outline-none text-center font-bold mb-2 font-sans">
                         <p class="text-[10px] text-gray-500 text-center mb-3">*ข้อมูลของท่านจะถูกเก็บเป็นความลับและใช้สำหรับติดต่อมอบรางวัลโดยอีซูซุสหะภัณฑ์เท่านั้น</p>
-                        <button onclick="submitTop5Score()" id="btn-submit-score" class="w-full bg-[#E3000F] text-white py-2 rounded-lg font-bold shadow-md hover:bg-red-700 active:scale-95 transition-all">บันทึกคะแนนเพื่อลุ้นรางวัล</button>
+                        <button onclick="submitTop3Score()" id="btn-submit-score" class="w-full bg-[#E3000F] text-white py-2 rounded-lg font-bold shadow-md hover:bg-red-700 active:scale-95 transition-all">บันทึกคะแนนเพื่อลุ้นรางวัล</button>
                     </div>
 
                     <div id="end-game-actions" class="flex flex-col gap-3">
@@ -192,57 +194,14 @@
                 </div>
             </div>
 
-            <div id="tutorial-modal" class="hidden pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-                <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative flex flex-col max-h-[90vh]">
-                    <div class="absolute top-0 left-0 w-full h-3 bg-gray-800"></div>
-                    <h2 class="text-3xl font-extrabold text-gray-900 mb-4 mt-2 text-center">วิธีเล่น และ กติกา</h2>
-                    
-                    <div class="overflow-y-auto flex-1 pr-2 space-y-4 text-left custom-scrollbar">
-                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                            <h3 class="font-bold text-[#E3000F] text-lg mb-1">การควบคุม</h3>
-                            <p class="text-sm text-gray-700">แตะหน้าจอฝั่ง <b class="text-black">ซ้าย</b> หรือ <b class="text-black">ขวา</b> เพื่อให้รถเปลี่ยนเลน</p>
-                        </div>
-                        
-                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                            <h3 class="font-bold text-[#E3000F] text-lg mb-2">ไอเทมและสิ่งกีดขวาง</h3>
-                            <ul class="text-sm text-gray-700 space-y-3">
-                                <li class="flex items-start gap-3">
-                                    <span class="text-2xl leading-none">🚧</span> 
-                                    <div><b class="text-red-600">กรวยจราจร:</b> ห้ามชนเด็ดขาด! ชนปุ๊บเกมจบปั๊บ</div>
-                                </li>
-                                <li class="flex items-start gap-3">
-                                    <span class="text-2xl leading-none">🛡️</span> 
-                                    <div><b class="text-blue-600">โลโก้ <span class="text-[#E3000F]">ISUZU</span>:</b> สะสมเพื่อรับคะแนนแบบสุ่ม (50 - 100 คะแนน)</div>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                            <h3 class="font-bold text-[#E3000F] text-lg mb-2">กติกาพิเศษ</h3>
-                            <p class="text-sm text-gray-700">ขับให้ไกลที่สุด รถจะเร็วขึ้นเมื่อถึงกิโลเมตรที่ 100 และเกมจะจบอย่างสมบูรณ์เมื่อคุณวิ่งถึง <b>1,000 กิโลเมตร (จบ 10 ด่าน)</b></p>
-                        </div>
-                    </div>
-
-                    <button onclick="hideTutorial()" class="w-full bg-gray-900 text-white py-3 rounded-xl font-bold mt-4 hover:bg-black active:scale-95 transition-colors">
-                        เข้าใจแล้ว ปิดหน้าต่าง
-                    </button>
-                </div>
-            </div>
-
         </div>
 
         <div id="toast">LEVEL UP!</div>
     </div>
 
     <script>
-        // ==========================================
-        // ตัวแปรสำคัญสำหรับแก้ภาพดำบนมือถือ
-        // ==========================================
         let finalImageDataUrl = ""; 
 
-        // ==========================================
-        // 🌟 1. ข้อมูลเกร็ดความรู้ (เรียงตามลำดับ Level 2, 4, 6, 8, 10)
-        // ==========================================
         const promoData = [
             { img: "SILVER.jpg", text: "my-SILVER ส่วนลดยางรถยนต์ 1200.- ส่วนลดแบตเตอรี่ 300.-" },
             { img: "GOLD.jpg", text: "my-GOLD ส่วนลดน้ำมันเครื่อง 3% ส่วนลดอะไหล่ 5% ส่วนลดยางรถยนต์ 2400.- ส่วนลดแบตเตอรี่ 600.-" },
@@ -251,9 +210,7 @@
             { img: "SAHAPHAN.jpg", text: "\"อีซูซุสหะภัณฑ์\" ซ่อมเร็ว ไม่ต้องรอนาน การันตีคุณภาพ" }
         ];
 
-        // ==========================================
-        // Firebase Setup
-        // ==========================================
+        // Firebase Setup (🌟 ดึงแค่ Top 3)
         const firebaseConfig = {
             apiKey: "AIzaSyAk_k2ALBMQkzxD7T5lZYkGnN1ZvjAlhCc",
             authDomain: "isuzu-match-card-game.firebaseapp.com",
@@ -271,13 +228,14 @@
         let isScoreSubmitted = false;
 
         function fetchLeaderboard() {
-            const leaderboardRef = db.ref('leaderboard_runner').orderByChild('score').limitToLast(5);
+            // 🌟 Limit to 3
+            const leaderboardRef = db.ref('leaderboard_runner').orderByChild('score').limitToLast(3);
             leaderboardRef.on('value', (snapshot) => {
                 topScoresList = [];
                 snapshot.forEach((childSnapshot) => {
                     topScoresList.push(childSnapshot.val());
                 });
-                topScoresList.reverse();
+                topScoresList.reverse(); // มากสุดขึ้นก่อน
                 updateLeaderboardUI();
             });
         }
@@ -293,7 +251,6 @@
             topScoresList.forEach((item, index) => {
                 let medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : `${index+1}.`));
                 let colorClass = index === 0 ? 'text-yellow-600 font-bold' : (index === 1 ? 'text-gray-500 font-bold' : (index === 2 ? 'text-orange-600 font-bold' : 'text-gray-700 font-semibold'));
-                
                 let displayName = item.name.length > 12 ? item.name.substring(0, 12) + '...' : item.name;
 
                 listEl.innerHTML += `<li class="flex justify-between items-center border-b border-gray-100 last:border-0 py-1">
@@ -305,7 +262,7 @@
         
         fetchLeaderboard();
 
-        function submitTop5Score() {
+        function submitTop3Score() {
             const phoneInput = document.getElementById('player-phone-input').value.trim();
             if (phoneInput.length < 9) {
                 showToastMsg("กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง");
@@ -326,7 +283,7 @@
             }).then(() => {
                 showToastMsg("บันทึกสถิติของคุณเรียบร้อยแล้ว!");
                 isScoreSubmitted = true;
-                document.getElementById('top5-form').classList.add('hidden');
+                document.getElementById('top3-form').classList.add('hidden');
                 document.getElementById('end-game-actions').classList.remove('hidden');
             }).catch((error) => {
                 console.error(error);
@@ -336,9 +293,7 @@
             });
         }
 
-        // ==========================================
         // Game Setup & Audio
-        // ==========================================
         const gameContainer = document.getElementById('game-container'); 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -393,7 +348,7 @@
         const distanceDisplay = document.getElementById('distance-display'), pointsDisplay = document.getElementById('points-display'), levelDisplay = document.getElementById('level-display'), levelText = document.getElementById('level-text');
         const finalDistanceDisplay = document.getElementById('final-distance'), finalPointsDisplay = document.getElementById('final-points'), finalLevelDisplay = document.getElementById('final-level');
         const endTitle = document.getElementById('end-title'), gameOverReason = document.getElementById('game-over-reason'), hellOverlay = document.getElementById('hell-overlay');
-        const confirmModal = document.getElementById('confirm-modal'), tutorialModal = document.getElementById('tutorial-modal'), toast = document.getElementById('toast');
+        const confirmModal = document.getElementById('confirm-modal'), toast = document.getElementById('toast');
         const interstitialModal = document.getElementById('interstitial-modal'); 
 
         const logoImg = new Image(); 
@@ -511,32 +466,44 @@
         }
 
         // ==========================================
-        // 🌟 2. ระบบดึงภาพและข้อความมาหยุดเกม (Pause)
+        // 🌟 2. เริ่มเกม และแสดง Pop-up เกร็ดความรู้ 1 ครั้ง
         // ==========================================
-        function showInterstitial(currentLevel) {
+        function checkAndStartGame() {
+            const inputElement = document.getElementById('player-name-input'); const name = inputElement.value.trim();
+            if (!name) { showToastMsg("⚠️ กรุณากรอกชื่อก่อนเริ่มเกม!"); inputElement.focus(); return; }
+            playerName = name; inputElement.blur(); 
+            
+            showInterstitial();
+        }
+
+        function showInterstitial() {
             gameState = 'INTERSTITIAL'; 
             stopEngineSound();
 
-            const index = (currentLevel / 2) - 1;
-            const promo = promoData[index];
+            const randomPromo = promoData[Math.floor(Math.random() * promoData.length)];
+            document.getElementById('interstitial-img').src = randomPromo.img;
+            document.getElementById('interstitial-text').innerText = randomPromo.text;
 
-            document.getElementById('interstitial-img').src = promo.img;
-            document.getElementById('interstitial-text').innerText = promo.text;
-
+            mainMenu.classList.add('hidden');
             interstitialModal.classList.remove('hidden');
         }
 
-        // ==========================================
-        // 🌟 3. ระบบกลับมาเล่นเกมต่อ (Resume)
-        // ==========================================
-        function resumeGame() {
+        function startGame() {
+            initAudio(); nextBeatTime = audioCtx.currentTime + 0.1;
+            mainMenu.classList.add('hidden'); 
+            gameOverScreen.classList.add('hidden'); 
+            confirmModal.classList.add('hidden'); 
             interstitialModal.classList.add('hidden');
-            gameState = 'PLAYING';
+            hud.classList.remove('hidden'); 
+            hellOverlay.classList.remove('active');
             
-            lastTime = performance.now(); 
+            gameState = 'PLAYING'; distance = 0; score = 0; logosCollected = 0; level = 1; baseSpeed = 2.5; isScoreSubmitted = false;
+            finalImageDataUrl = ""; 
             
-            if (soundEnabled) updateEngineSound(speed);
-            requestAnimationFrame(gameLoop); 
+            distanceDisplay.innerText = distance; pointsDisplay.innerHTML = `${score} <span class="text-[10px] text-green-200">PTS</span>`; levelDisplay.innerText = level;
+            
+            frameCount = 0; player.lane = 1; player.currentX = getLaneCenterX(1); player.currentRotation = 0;
+            obstacles = []; logos = []; lastTime = performance.now(); requestAnimationFrame(gameLoop);
         }
 
         // --- Logic ---
@@ -548,10 +515,6 @@
             if(level === 10) { showLevelUpToast(`LEVEL ${level}! <br><span style="font-size:20px; color:#ff4444;">ยินดีต้อนรับสู่นรก!</span>`); hellOverlay.classList.add('active'); } 
             else { showLevelUpToast(`LEVEL ${level}! <br><span style="font-size:20px; color:#ffffff;">ความเร็วเพิ่มขึ้น!</span>`); }
             playLevelUpSound();
-
-            if (level % 2 === 0) {
-                showInterstitial(level);
-            }
         }
 
         function spawnEntities(deltaTime) {
@@ -651,26 +614,6 @@
         window.addEventListener('touchstart', handleInput, {passive: false}); window.addEventListener('mousedown', handleInput);
         window.addEventListener('keydown', (e) => { if (gameState !== 'PLAYING') return; if (e.key === 'ArrowLeft' || e.key === 'a') player.lane = Math.max(0, player.lane - 1); if (e.key === 'ArrowRight' || e.key === 'd') player.lane = Math.min(LANES - 1, player.lane + 1); });
 
-        function checkAndStartGame() {
-            const inputElement = document.getElementById('player-name-input'); const name = inputElement.value.trim();
-            if (!name) { showToastMsg("⚠️ กรุณากรอกชื่อก่อนเริ่มเกม!"); inputElement.focus(); return; }
-            playerName = name; inputElement.blur(); startGame();
-        }
-
-        function startGame() {
-            initAudio(); nextBeatTime = audioCtx.currentTime + 0.1;
-            mainMenu.classList.add('hidden'); gameOverScreen.classList.add('hidden'); confirmModal.classList.add('hidden'); tutorialModal.classList.add('hidden'); hud.classList.remove('hidden'); hellOverlay.classList.remove('active');
-            interstitialModal.classList.add('hidden'); 
-            
-            gameState = 'PLAYING'; distance = 0; score = 0; logosCollected = 0; level = 1; baseSpeed = 2.5; isScoreSubmitted = false;
-            finalImageDataUrl = ""; 
-            
-            distanceDisplay.innerText = distance; pointsDisplay.innerHTML = `${score} <span class="text-[10px] text-green-200">PTS</span>`; levelDisplay.innerText = level;
-            
-            frameCount = 0; player.lane = 1; player.currentX = getLaneCenterX(1); player.currentRotation = 0;
-            obstacles = []; logos = []; lastTime = performance.now(); requestAnimationFrame(gameLoop);
-        }
-
         function endGame(reason, isWin) {
             gameState = 'GAMEOVER'; stopEngineSound(); if(!isWin) playCrashSound();
             
@@ -679,28 +622,28 @@
             endTitle.style.color = isWin ? "#10B981" : "#111111";
             finalDistanceDisplay.innerText = distance; finalPointsDisplay.innerText = score; finalLevelDisplay.innerText = level; 
             
-            // 🌟 1. ตั้งค่าแสดงผลข้อความตามเงื่อนไข (ชนะ หรือ แพ้/ชนกรวย) 🌟
             if (isWin) {
                 gameOverReason.innerHTML = "เข้าศูนย์อีซูซุสหะภัณฑ์ไม่ต้องรอนาน";
             } else {
                 gameOverReason.innerHTML = "ศูนย์ซ่อมสีอีซูซุสหะภัณฑ์เราก็มีนะ<br>ไม่ต้องรอนาน อะไหล่แท้";
             }
             
-            let isTop5 = false;
-            if (topScoresList.length < 5) {
-                isTop5 = true;
+            // 🌟 เช็คอันดับ Top 3
+            let isTop3 = false;
+            if (topScoresList.length < 3) {
+                isTop3 = true;
             } else {
-                let fifthPlaceScore = topScoresList[4].score;
-                if (score > fifthPlaceScore) isTop5 = true; 
+                let thirdPlaceScore = topScoresList[2].score;
+                if (score > thirdPlaceScore) isTop3 = true; 
             }
 
-            if (isTop5 && !isScoreSubmitted && score > 0) {
-                document.getElementById('top5-form').classList.remove('hidden');
+            if (isTop3 && !isScoreSubmitted && score > 0) {
+                document.getElementById('top3-form').classList.remove('hidden');
                 document.getElementById('btn-submit-score').innerText = 'บันทึกคะแนนเพื่อลุ้นรางวัล';
                 document.getElementById('btn-submit-score').disabled = false;
                 document.getElementById('end-game-actions').classList.add('hidden');
             } else {
-                document.getElementById('top5-form').classList.add('hidden');
+                document.getElementById('top3-form').classList.add('hidden');
                 document.getElementById('end-game-actions').classList.remove('hidden');
             }
 
@@ -709,13 +652,9 @@
 
         function requestRestart() { confirmModal.classList.remove('hidden'); }
         function hideConfirmModal() { confirmModal.classList.add('hidden'); }
-        function restartGame() { startGame(); }
-        function showTutorial() { tutorialModal.classList.remove('hidden'); }
-        function hideTutorial() { tutorialModal.classList.add('hidden'); }
+        // 🌟 กลับไปกดแล้วเจอเกร็ดความรู้อีก 1 รอบ
+        function restartGame() { hideConfirmModal(); showInterstitial(); }
 
-        // ==========================================
-        // ส่วนวาดภาพ Background และ Save ภาพ (อัปเดตสำหรับมือถือ)
-        // ==========================================
         function drawFinalCanvasState(isWin) {
             const bgImages = ['1.jpg', '2.jpg', '3.jpg', '4.jpg'];
             const selectedBgSrc = bgImages[Math.floor(Math.random() * bgImages.length)];
