@@ -82,7 +82,7 @@
                 </h1>
                 
                 <div class="bg-white/95 rounded-xl p-3 mb-3 w-full max-w-[280px] shadow-lg">
-                    <h3 class="text-[#E3000F] font-bold text-center border-b-2 border-red-200 pb-1 mb-2 text-sm">🏆 Top 3 คะแนนสูงสุด</h3>
+                    <h3 class="text-[#E3000F] font-bold text-center border-b-2 border-red-200 pb-1 mb-2 text-sm">🏆 Top 5 ผู้ทำสถิติสูงสุด</h3>
                     <ul id="leaderboard-ui" class="text-sm text-gray-800 space-y-1">
                         <li class="text-center text-gray-500">กำลังโหลดข้อมูล...</li>
                     </ul>
@@ -171,7 +171,7 @@
                     </div>
 
                     <div id="top3-form" class="hidden bg-red-50 p-4 rounded-xl border border-red-200 mb-4 text-left">
-                        <h3 class="text-[#E3000F] font-bold text-lg mb-1">🎉 ยินดีด้วย! คุณติดอันดับ Top 3</h3>
+                        <h3 class="text-[#E3000F] font-bold text-lg mb-1">🎉 ยินดีด้วย! คุณติดอันดับ Top 10</h3>
                         <p class="text-xs text-gray-600 mb-3">กรุณากรอกเบอร์โทรศัพท์เพื่อบันทึกสถิติและรับสิทธิ์ลุ้นรางวัล</p>
                         <input type="tel" id="player-phone-input" placeholder="เบอร์โทรศัพท์ 10 หลัก" maxlength="10" 
                                class="w-full px-3 py-2 rounded-lg border-2 border-gray-300 focus:border-[#E3000F] focus:outline-none text-center font-bold mb-2 font-sans">
@@ -240,11 +240,14 @@
         let isScoreSubmitted = false;
 
         function fetchLeaderboard() {
-            const leaderboardRef = db.ref('leaderboard_runner').orderByChild('score').limitToLast(3);
+            // 🌟 แก้ไข: ดึงข้อมูลมา 10 คนสุดท้ายจากฐานข้อมูลแทน (เพื่อเก็บเป็น Top 10) 🌟
+            const leaderboardRef = db.ref('leaderboard_runner').orderByChild('score').limitToLast(10);
             leaderboardRef.on('value', (snapshot) => {
                 topScoresList = [];
                 snapshot.forEach((childSnapshot) => {
-                    topScoresList.push(childSnapshot.val());
+                    let data = childSnapshot.val();
+                    data.key = childSnapshot.key; // แอบเก็บ key ไว้ใช้ตอนลบข้อมูลด้วย
+                    topScoresList.push(data);
                 });
                 topScoresList.reverse();
                 updateLeaderboardUI();
@@ -259,14 +262,17 @@
                 return;
             }
             
-            topScoresList.forEach((item, index) => {
+            // 🌟 แก้ไข: ตัดข้อมูลเอามาแสดงแค่ 5 คนแรก 🌟
+            const top5List = topScoresList.slice(0, 5);
+
+            top5List.forEach((item, index) => {
                 let medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : `${index+1}.`));
                 let colorClass = index === 0 ? 'text-yellow-600 font-bold' : (index === 1 ? 'text-gray-500 font-bold' : (index === 2 ? 'text-orange-600 font-bold' : 'text-gray-700 font-semibold'));
                 let displayName = item.name.length > 12 ? item.name.substring(0, 12) + '...' : item.name;
 
+                // 🌟 แก้ไข: ลบส่วนที่โชว์ตัวเลขคะแนนทิ้งไป 🌟
                 listEl.innerHTML += `<li class="flex justify-between items-center border-b border-gray-100 last:border-0 py-1">
                     <span class="${colorClass}">${medal} ${displayName}</span>
-                    <span class="font-bold text-green-600">${item.score} <span class="text-[10px] text-gray-400">PTS</span></span>
                 </li>`;
             });
         }
@@ -296,6 +302,26 @@
                 isScoreSubmitted = true;
                 document.getElementById('top3-form').classList.add('hidden');
                 document.getElementById('end-game-actions').classList.remove('hidden');
+
+                // 🌟 เพิ่มระบบ Cleanup: ตรวจสอบและลบคนที่ตกอันดับที่ 10 ทิ้งจาก Firebase 🌟
+                db.ref('leaderboard_runner').once('value').then(snapshot => {
+                    if (snapshot.numChildren() > 10) {
+                        let allRecords = [];
+                        snapshot.forEach(child => {
+                            allRecords.push({ key: child.key, score: child.val().score });
+                        });
+                        
+                        // เรียงคะแนนจากน้อยไปมาก
+                        allRecords.sort((a, b) => a.score - b.score);
+                        
+                        // คำนวณจำนวนที่ต้องลบออก แล้วลบตัวที่คะแนนน้อยที่สุดทิ้ง
+                        let overCount = allRecords.length - 10;
+                        for (let i = 0; i < overCount; i++) {
+                            db.ref('leaderboard_runner').child(allRecords[i].key).remove();
+                        }
+                    }
+                });
+
             }).catch((error) => {
                 console.error(error);
                 showToastMsg("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
@@ -354,7 +380,7 @@
         }
 
         const mainMenu = document.getElementById('main-menu'), gameOverScreen = document.getElementById('game-over'), hud = document.getElementById('hud');
-        const mobileControls = document.getElementById('mobile-controls'); // ตัวแปรสำหรับปุ่มลูกศร
+        const mobileControls = document.getElementById('mobile-controls'); 
         const distanceDisplay = document.getElementById('distance-display'), pointsDisplay = document.getElementById('points-display'), levelDisplay = document.getElementById('level-display'), levelText = document.getElementById('level-text');
         const finalDistanceDisplay = document.getElementById('final-distance'), finalPointsDisplay = document.getElementById('final-points'), finalLevelDisplay = document.getElementById('final-level');
         const endTitle = document.getElementById('end-title'), gameOverReason = document.getElementById('game-over-reason'), hellOverlay = document.getElementById('hell-overlay');
@@ -644,15 +670,16 @@
                 gameOverReason.innerHTML = "ศูนย์ซ่อมสีอีซูซุสหะภัณฑ์เราก็มีนะ<br>ไม่ต้องรอนาน อะไหล่แท้";
             }
             
-            let isTop3 = false;
-            if (topScoresList.length < 3) {
-                isTop3 = true;
+            // 🌟 แก้ไข: ตรวจสอบสิทธิ์กับ Top 10 แทน Top 3 🌟
+            let isTop10 = false;
+            if (topScoresList.length < 10) {
+                isTop10 = true;
             } else {
-                let thirdPlaceScore = topScoresList[2].score;
-                if (score > thirdPlaceScore) isTop3 = true; 
+                let tenthPlaceScore = topScoresList[topScoresList.length - 1].score;
+                if (score > tenthPlaceScore) isTop10 = true; 
             }
 
-            if (isTop3 && !isScoreSubmitted && score > 0) {
+            if (isTop10 && !isScoreSubmitted && score > 0) {
                 document.getElementById('top3-form').classList.remove('hidden');
                 document.getElementById('btn-submit-score').innerText = 'บันทึกคะแนนเพื่อลุ้นรางวัล';
                 document.getElementById('btn-submit-score').disabled = false;
