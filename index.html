@@ -240,16 +240,26 @@
         let isScoreSubmitted = false;
 
         function fetchLeaderboard() {
-            // 🌟 แก้ไข: ดึงข้อมูลมา 10 คนสุดท้ายจากฐานข้อมูลแทน (เพื่อเก็บเป็น Top 10) 🌟
-            const leaderboardRef = db.ref('leaderboard_runner').orderByChild('score').limitToLast(10);
+            // ดึงข้อมูลทั้งหมดจากระบบมาไว้ที่หน้าเว็บ
+            const leaderboardRef = db.ref('leaderboard_runner');
             leaderboardRef.on('value', (snapshot) => {
                 topScoresList = [];
                 snapshot.forEach((childSnapshot) => {
                     let data = childSnapshot.val();
-                    data.key = childSnapshot.key; // แอบเก็บ key ไว้ใช้ตอนลบข้อมูลด้วย
+                    data.key = childSnapshot.key;
+                    // สร้างความปลอดภัยกันข้อมูลพัง ถ้าไม่มีระยะทางให้เซ็ตเป็น 0
+                    if (data.distance === undefined) data.distance = 0; 
                     topScoresList.push(data);
                 });
-                topScoresList.reverse();
+                
+                // 🌟 แก้ไข: จัดเรียงข้อมูลแบบ 2 เงื่อนไข (ระยะทาง > คะแนน) 🌟
+                topScoresList.sort((a, b) => {
+                    if (b.distance !== a.distance) {
+                        return b.distance - a.distance; // เทียบระยะทางก่อน
+                    }
+                    return b.score - a.score; // ถ้าระยะทางเท่ากัน ให้เทียบที่คะแนน
+                });
+                
                 updateLeaderboardUI();
             });
         }
@@ -262,7 +272,7 @@
                 return;
             }
             
-            // 🌟 แก้ไข: ตัดข้อมูลเอามาแสดงแค่ 5 คนแรก 🌟
+            // ตัดเอามาโชว์แค่ 5 อันดับแรก
             const top5List = topScoresList.slice(0, 5);
 
             top5List.forEach((item, index) => {
@@ -270,7 +280,6 @@
                 let colorClass = index === 0 ? 'text-yellow-600 font-bold' : (index === 1 ? 'text-gray-500 font-bold' : (index === 2 ? 'text-orange-600 font-bold' : 'text-gray-700 font-semibold'));
                 let displayName = item.name.length > 12 ? item.name.substring(0, 12) + '...' : item.name;
 
-                // 🌟 แก้ไข: ลบส่วนที่โชว์ตัวเลขคะแนนทิ้งไป 🌟
                 listEl.innerHTML += `<li class="flex justify-between items-center border-b border-gray-100 last:border-0 py-1">
                     <span class="${colorClass}">${medal} ${displayName}</span>
                 </li>`;
@@ -303,19 +312,26 @@
                 document.getElementById('top3-form').classList.add('hidden');
                 document.getElementById('end-game-actions').classList.remove('hidden');
 
-                // 🌟 เพิ่มระบบ Cleanup: ตรวจสอบและลบคนที่ตกอันดับที่ 10 ทิ้งจาก Firebase 🌟
+                // 🌟 ระบบ Cleanup แบบเรียงตาม 2 ตัวแปร 🌟
                 db.ref('leaderboard_runner').once('value').then(snapshot => {
                     if (snapshot.numChildren() > 10) {
                         let allRecords = [];
                         snapshot.forEach(child => {
-                            allRecords.push({ key: child.key, score: child.val().score });
+                            let data = child.val();
+                            if (data.distance === undefined) data.distance = 0;
+                            allRecords.push({ key: child.key, score: data.score, distance: data.distance });
                         });
                         
-                        // เรียงคะแนนจากน้อยไปมาก
-                        allRecords.sort((a, b) => a.score - b.score);
+                        // เรียงจาก อ่อนสุด ไป เก่งสุด (เพื่อหาคนที่จะลบ)
+                        allRecords.sort((a, b) => {
+                            if (a.distance !== b.distance) {
+                                return a.distance - b.distance; 
+                            }
+                            return a.score - b.score;
+                        });
                         
-                        // คำนวณจำนวนที่ต้องลบออก แล้วลบตัวที่คะแนนน้อยที่สุดทิ้ง
                         let overCount = allRecords.length - 10;
+                        // ลบพวกอันดับท้ายๆ ทิ้งให้หมด
                         for (let i = 0; i < overCount; i++) {
                             db.ref('leaderboard_runner').child(allRecords[i].key).remove();
                         }
@@ -527,7 +543,7 @@
             confirmModal.classList.add('hidden'); 
             interstitialModal.classList.add('hidden');
             hud.classList.remove('hidden'); 
-            mobileControls.classList.remove('hidden'); // แสดงปุ่มลูกศร
+            mobileControls.classList.remove('hidden'); 
             hellOverlay.classList.remove('active');
             
             gameState = 'PLAYING'; distance = 0; score = 0; logosCollected = 0; level = 1; baseSpeed = 2.5; isScoreSubmitted = false;
@@ -633,7 +649,6 @@
             requestAnimationFrame(menuLoop);
         }
 
-        // --- Functions สำหรับปุ่มลูกศรใหม่ ---
         function moveLeft(e) { 
             e.preventDefault(); e.stopPropagation(); 
             if (gameState === 'PLAYING') player.lane = Math.max(0, player.lane - 1); 
@@ -643,7 +658,6 @@
             if (gameState === 'PLAYING') player.lane = Math.min(LANES - 1, player.lane + 1); 
         }
 
-        // ผู้เล่นยังสามารถแตะครึ่งซ้าย-ขวาของหน้าจอได้เหมือนเดิม เพื่อความสะดวก
         function handleInput(e) {
             if (gameState !== 'PLAYING') return; if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') e.preventDefault();
             let clientX; if (e.type === 'touchstart') clientX = e.touches[0].clientX; else if (e.type === 'mousedown') clientX = e.clientX; else return;
@@ -658,7 +672,7 @@
             gameState = 'GAMEOVER'; stopEngineSound(); if(!isWin) playCrashSound();
             
             hud.classList.add('hidden'); 
-            mobileControls.classList.add('hidden'); // ซ่อนปุ่มเมื่อจบเกม
+            mobileControls.classList.add('hidden'); 
             gameOverScreen.classList.remove('hidden');
             endTitle.innerText = isWin ? "YOU WIN!" : "GAME OVER";
             endTitle.style.color = isWin ? "#10B981" : "#111111";
@@ -670,16 +684,25 @@
                 gameOverReason.innerHTML = "ศูนย์ซ่อมสีอีซูซุสหะภัณฑ์เราก็มีนะ<br>ไม่ต้องรอนาน อะไหล่แท้";
             }
             
-            // 🌟 แก้ไข: ตรวจสอบสิทธิ์กับ Top 10 แทน Top 3 🌟
+            // 🌟 แก้ไข: ตรวจสอบสิทธิ์กับ Top 10 โดยวัดระยะทางก่อน แล้วค่อยวัดคะแนน 🌟
             let isTop10 = false;
             if (topScoresList.length < 10) {
                 isTop10 = true;
             } else {
-                let tenthPlaceScore = topScoresList[topScoresList.length - 1].score;
-                if (score > tenthPlaceScore) isTop10 = true; 
+                // คนที่ 10 (คนสุดท้ายใน List ซึ่งเป็นคนที่คะแนน/ระยะทางน้อยที่สุดที่เรามีเก็บไว้)
+                let tenthPlace = topScoresList[topScoresList.length - 1];
+                
+                // ถ้าระยะทางไกลกว่าคนที่ 10 ชนะเลย
+                if (distance > tenthPlace.distance) {
+                    isTop10 = true;
+                } 
+                // ถ้าระยะทางเท่ากัน แต่คะแนนเยอะกว่า ก็ชนะเหมือนกัน
+                else if (distance === tenthPlace.distance && score > tenthPlace.score) {
+                    isTop10 = true;
+                }
             }
 
-            if (isTop10 && !isScoreSubmitted && score > 0) {
+            if (isTop10 && !isScoreSubmitted && distance > 0) {
                 document.getElementById('top3-form').classList.remove('hidden');
                 document.getElementById('btn-submit-score').innerText = 'บันทึกคะแนนเพื่อลุ้นรางวัล';
                 document.getElementById('btn-submit-score').disabled = false;
